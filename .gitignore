@@ -214,5 +214,18 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# Frontend (Streamlit)
+frontend/.streamlit/secrets.toml
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars
+
 # Streamlit
+.streamlit/secrets.toml
+
+.env
+.env.local
 .streamlit/secrets.toml
