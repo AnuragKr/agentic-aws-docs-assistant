@@ -1,0 +1,118 @@
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from functools import cached_property
+
+from config.settings import Settings, get_settings
+from domain.models import IngestionJob, JobStatus
+from infrastructure.aws.dynamodb_registry import DynamoDBProcessingRegistry
+from infrastructure.storage.file_job_store import FileJobStore
+from ingestion.chunkers.hierarchical import HierarchicalChunker
+from ingestion.embeddings.factory import get_embedding_provider
+from ingestion.enrichers.chunks import ChunkEnricher
+from ingestion.enrichers.metadata import MetadataExtractor
+from ingestion.loaders.s3_loader import S3DocumentLoader
+from ingestion.parsers.factory import ParserFactory
+from ingestion.pipeline import DocumentIngestionPipeline
+from ingestion.preprocessors.pipeline import DocumentPreprocessor
+from ingestion.writers.s3_writer import S3ProcessedDocumentWriter
+
+
+@dataclass
+class IngestionContainer:
+    settings: Settings = field(default_factory=get_settings)
+
+    @cached_property
+    def job_store(self) -> FileJobStore:
+        return FileJobStore(self.settings.job_store_path())
+
+    @cached_property
+    def loader(self) -> S3DocumentLoader:
+        s = self.settings
+        return S3DocumentLoader(s.s3_raw_bucket, s.aws_region, s.s3_raw_prefix)
+
+    @cached_property
+    def parser_factory(self) -> ParserFactory:
+        return ParserFactory()
+
+    @cached_property
+    def preprocessor(self) -> DocumentPreprocessor:
+        return DocumentPreprocessor()
+
+    @cached_property
+    def metadata_extractor(self) -> MetadataExtractor:
+        return MetadataExtractor(self.settings)
+
+    @cached_property
+    def chunker(self) -> HierarchicalChunker:
+        return HierarchicalChunker(self.settings)
+
+    @cached_property
+    def chunk_enricher(self) -> ChunkEnricher:
+        return ChunkEnricher()
+
+    @cached_property
+    def embedding_provider(self):
+        return get_embedding_provider(self.settings)
+
+    @cached_property
+    def writer(self) -> S3ProcessedDocumentWriter:
+        s = self.settings
+        return S3ProcessedDocumentWriter(
+            s.s3_processed_bucket, s.aws_region, s.s3_processed_prefix
+        )
+
+    @cached_property
+    def registry(self) -> DynamoDBProcessingRegistry:
+        s = self.settings
+        return DynamoDBProcessingRegistry(s.dynamodb_registry_table, s.aws_region)
+
+    @cached_property
+    def pipeline(self) -> DocumentIngestionPipeline:
+        return DocumentIngestionPipeline(
+            loader=self.loader,
+            parser_factory=self.parser_factory,
+            preprocessor=self.preprocessor,
+            metadata_extractor=self.metadata_extractor,
+            chunker=self.chunker,
+            chunk_enricher=self.chunk_enricher,
+            embedding_provider=self.embedding_provider,
+            writer=self.writer,
+            registry=self.registry,
+        )
+
+
+_container: IngestionContainer | None = None
+
+
+def get_container() -> IngestionContainer:
+    global _container
+    if _container is None:
+        _container = IngestionContainer()
+    return _container
+
+
+class IngestionService:
+    def __init__(self, container: IngestionContainer) -> None:
+        self._container = container
+
+    def run_job(self, job_id: str) -> None:
+        job = self._container.job_store.get(job_id)
+        if job is None:
+            raise ValueError(f"Job {job_id} not found")
+
+        job.status = JobStatus.RUNNING
+        self._container.job_store.save(job)
+
+        def on_progress(updated: IngestionJob) -> None:
+            self._container.job_store.save(updated)
+
+        try:
+            self._container.pipeline.run(job, on_progress=on_progress)
+            job.status = JobStatus.COMPLETED
+        except Exception as exc:
+            job.status = JobStatus.FAILED
+            job.phase = "failed"
+            job.errors.append(str(exc))
+        finally:
+            job.finished_at = datetime.now(timezone.utc)
+            self._container.job_store.save(job)

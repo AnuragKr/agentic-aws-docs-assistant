@@ -1,12 +1,18 @@
-from pathlib import Path
+from datetime import datetime, timezone
 
-from app.ingestion.domain.document import ParsedDocument
-from app.ingestion.preprocessors.pipeline import PreprocessorPipeline
+from domain.models import ParsedDocument, SectionNode
+from ingestion.preprocessors.pipeline import DocumentPreprocessor
 
 
-def test_section_detection() -> None:
-    text = Path(__file__).parent.parent.joinpath("fixtures/sample.md").read_text()
-    doc = ParsedDocument(key="lambda/guide.md", text=text, extension=".md")
-    result = PreprocessorPipeline().process(doc)
-    assert len(result.sections) >= 2
-    assert any(s.title == "Concurrency" for s in result.sections)
+def test_preprocessor_preserves_docling_sections() -> None:
+    parsed = ParsedDocument(
+        key="lambda/guide.md",
+        text="# Lambda\n\nIntro",
+        extension=".md",
+        etag="1",
+        last_modified=datetime.now(timezone.utc),
+        sections=[SectionNode(title="Lambda", level=1, content="Intro")],
+    )
+    doc = DocumentPreprocessor().process(parsed)
+    assert len(doc.sections) == 1
+    assert doc.sections[0].title == "Lambda"

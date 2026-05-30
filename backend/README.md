@@ -1,31 +1,40 @@
-# Backend — FastAPI
+# Backend — Document Ingestion Service
 
-## uv (recommended)
+## Pipeline (`ingestion/pipeline.py`)
 
-```bash
-uv sync
-cp .env.example .env
-uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+Load → Docling Parse → Preprocess → Metadata → Chunk → Enrich → Embed → Store
 ```
 
-## pip
+## Stack
 
-```bash
-pip install -r requirements.txt
-export PYTHONPATH=src
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+| Layer | Library |
+|-------|---------|
+| Primary parser | **Docling** (PDF, HTML, MD) |
+| Hierarchy | Docling document structure (not regex) |
+| Chunking | Custom hierarchical chunker + tiktoken |
+| Fallback split | LangChain `RecursiveCharacterTextSplitter` (oversized sections only) |
+| Embeddings | Strategy + Factory + Singleton |
+
+LangChain is **not** tightly coupled — removing it only affects the fallback splitter.
+
+## Structure
+
+```
+ingestion/
+├── pipeline.py
+├── parsers/          DoclingParser + TextParser + Factory
+├── preprocessors/    cleanup only (no heading regex)
+├── chunkers/         HierarchicalChunker
+├── enrichers/
+├── embeddings/
+└── writers/
 ```
 
-## Docker
+## Run
 
 ```bash
-docker build -t aws-docs-backend .
-docker run --rm -p 8000:8000 --env-file .env aws-docs-backend
-```
-
-## Tests
-
-```bash
-uv sync --group dev
-uv run pytest
+cd backend && uv sync
+uv run uvicorn main:app --host 127.0.0.1 --port 8000
+uv run python -m ingestion.runner --job-id <uuid>
 ```
