@@ -103,6 +103,7 @@ class HierarchicalChunker:
                     section=section,
                     subsection=subsection,
                     source_url=metadata.source_url,
+                    document_type=metadata.document_type,
                     content_type="code" if CODE_FENCE_RE.search(part) else "text",
                     chunk_level="semantic",
                     heading_level=heading_level,

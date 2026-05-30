@@ -61,6 +61,8 @@ class PreprocessedDocument(BaseModel):
 
 
 class DocumentMetadata(BaseModel):
+    """Document-level metadata for Agentic RAG."""
+
     document_id: str
     title: str
     service: str | None = None
@@ -70,9 +72,13 @@ class DocumentMetadata(BaseModel):
     source_key: str
     last_modified: datetime
     etag: str
+    document_summary: str = ""
+    sections: list[SectionNode] = Field(default_factory=list)
 
 
 class ChunkRecord(BaseModel):
+    """Chunk with rich metadata for retrieval and filtering."""
+
     chunk_id: str
     document_id: str
     content: str
@@ -82,6 +88,7 @@ class ChunkRecord(BaseModel):
     section: str | None = None
     subsection: str | None = None
     source_url: str = ""
+    document_type: str | None = None
     chunk_summary: str = ""
     keywords: list[str] = Field(default_factory=list)
     topics: list[str] = Field(default_factory=list)
@@ -94,6 +101,8 @@ class ChunkRecord(BaseModel):
 
 
 class DocumentRegistryEntry(BaseModel):
+    """DynamoDB processing registry record."""
+
     document_id: str
     source_key: str
     etag: str
@@ -111,9 +120,16 @@ class IngestionJob(BaseModel):
     documents_skipped: int = 0
     documents_failed: int = 0
     chunks_written: int = 0
+    embeddings_generated: int = 0
     errors: list[str] = Field(default_factory=list)
     prefix: str | None = None
     max_documents: int | None = None
     force_reprocess: bool = False
     started_at: datetime = Field(default_factory=datetime.utcnow)
     finished_at: datetime | None = None
+
+
+# Interview-friendly aliases
+Document = DocumentMetadata
+Chunk = ChunkRecord
+ProcessingRecord = DocumentRegistryEntry

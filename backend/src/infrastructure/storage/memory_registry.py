@@ -19,5 +19,6 @@ class InMemoryProcessingRegistry:
             return False
         return (
             existing.etag == source.etag
+            and existing.last_modified == source.last_modified.isoformat()
             and existing.status == RegistryStatus.COMPLETED
         )

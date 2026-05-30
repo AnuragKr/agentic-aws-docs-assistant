@@ -25,3 +25,20 @@ def test_registry_skips_unchanged_documents() -> None:
 
     source.etag = "etag-2"
     assert registry.is_unchanged(source) is False
+
+
+def test_registry_reprocesses_when_last_modified_changes() -> None:
+    registry = InMemoryProcessingRegistry()
+    modified = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    source = SourceObject(key="lambda/guide.md", etag="etag-1", last_modified=modified)
+    registry.upsert(
+        DocumentRegistryEntry(
+            document_id="doc1",
+            source_key=source.key,
+            etag="etag-1",
+            last_modified=modified.isoformat(),
+            status=RegistryStatus.COMPLETED,
+        )
+    )
+    source.last_modified = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    assert registry.is_unchanged(source) is False

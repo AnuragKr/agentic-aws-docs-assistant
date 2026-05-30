@@ -44,6 +44,15 @@ class Settings(BaseSettings):
         default="sentence-transformers/all-MiniLM-L6-v2",
         alias="EMBEDDING_MODEL_ID",
     )
+    embedding_batch_size: int = Field(default=32, alias="EMBEDDING_BATCH_SIZE")
+
+    opensearch_host: str = Field(default="localhost", alias="OPENSEARCH_HOST")
+    opensearch_port: int = Field(default=9200, alias="OPENSEARCH_PORT")
+    opensearch_index: str = Field(default="aws-docs", alias="OPENSEARCH_INDEX")
+    opensearch_auth_mode: str = Field(default="basic", alias="OPENSEARCH_AUTH_MODE")
+    opensearch_user: str = Field(default="admin", alias="OPENSEARCH_USER")
+    opensearch_password: str = Field(default="", alias="OPENSEARCH_PASSWORD")
+    opensearch_use_ssl: bool = Field(default=False, alias="OPENSEARCH_USE_SSL")
 
     cors_origins: str = Field(
         default="http://localhost:8501,http://127.0.0.1:8501",

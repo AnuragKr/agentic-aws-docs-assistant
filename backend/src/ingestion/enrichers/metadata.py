@@ -49,6 +49,7 @@ class MetadataExtractor:
             source_key=document.key,
             last_modified=document.last_modified,
             etag=document.etag,
+            sections=document.sections,
         )
         logger.info("metadata_extracted", document_id=metadata.document_id, service=service)
         return metadata

@@ -5,10 +5,12 @@ from functools import cached_property
 from config.settings import Settings, get_settings
 from domain.models import IngestionJob, JobStatus
 from infrastructure.aws.dynamodb_registry import DynamoDBProcessingRegistry
+from infrastructure.opensearch.indexer import OpenSearchIndexer, create_opensearch_client
 from infrastructure.storage.file_job_store import FileJobStore
 from ingestion.chunkers.hierarchical import HierarchicalChunker
 from ingestion.embeddings.factory import get_embedding_provider
 from ingestion.enrichers.chunks import ChunkEnricher
+from ingestion.enrichers.document import DocumentEnricher
 from ingestion.enrichers.metadata import MetadataExtractor
 from ingestion.loaders.s3_loader import S3DocumentLoader
 from ingestion.parsers.factory import ParserFactory
@@ -43,6 +45,10 @@ class IngestionContainer:
         return MetadataExtractor(self.settings)
 
     @cached_property
+    def document_enricher(self) -> DocumentEnricher:
+        return DocumentEnricher()
+
+    @cached_property
     def chunker(self) -> HierarchicalChunker:
         return HierarchicalChunker(self.settings)
 
@@ -62,6 +68,10 @@ class IngestionContainer:
         )
 
     @cached_property
+    def indexer(self) -> OpenSearchIndexer:
+        return OpenSearchIndexer(create_opensearch_client(self.settings), self.settings)
+
+    @cached_property
     def registry(self) -> DynamoDBProcessingRegistry:
         s = self.settings
         return DynamoDBProcessingRegistry(s.dynamodb_registry_table, s.aws_region)
@@ -73,10 +83,12 @@ class IngestionContainer:
             parser_factory=self.parser_factory,
             preprocessor=self.preprocessor,
             metadata_extractor=self.metadata_extractor,
+            document_enricher=self.document_enricher,
             chunker=self.chunker,
             chunk_enricher=self.chunk_enricher,
             embedding_provider=self.embedding_provider,
             writer=self.writer,
+            indexer=self.indexer,
             registry=self.registry,
         )
 

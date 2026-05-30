@@ -8,7 +8,12 @@ logger = get_logger(__name__)
 
 
 class S3ProcessedDocumentWriter:
-    """Write processed metadata, documents, and chunks to S3."""
+    """
+    Store artifacts under:
+        processed/metadata/
+        processed/documents/
+        processed/chunks/
+    """
 
     def __init__(self, bucket: str, region: str, prefix: str = "processed/") -> None:
         if not bucket:
@@ -42,6 +47,7 @@ class S3ProcessedDocumentWriter:
                 "document_id": doc_id,
                 "source_key": document.key,
                 "title": metadata.title,
+                "document_summary": metadata.document_summary,
                 "text": document.text,
                 "sections": [s.model_dump() for s in document.sections],
                 "processed_at": utc_now_iso(),

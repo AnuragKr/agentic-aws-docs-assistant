@@ -31,6 +31,7 @@ class IngestionStatusResponse(BaseModel):
     documents_skipped: int
     documents_failed: int
     chunks_written: int
+    embeddings_generated: int
     errors: list[str]
 
 
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
             documents_skipped=job.documents_skipped,
             documents_failed=job.documents_failed,
             chunks_written=job.chunks_written,
+            embeddings_generated=job.embeddings_generated,
             errors=job.errors,
         )
 

@@ -5,8 +5,16 @@ from ingestion.enrichers.metadata import MetadataExtractor
 logger = get_logger(__name__)
 
 
+def build_embedding_text(chunk: ChunkRecord, metadata: DocumentMetadata) -> str:
+    """Prepend parent context before embedding for better retrieval."""
+    context = [p for p in [metadata.service, metadata.title, chunk.section, chunk.subsection] if p]
+    if not context:
+        return chunk.content
+    return f"{' | '.join(context)}\n\n{chunk.content}"
+
+
 class ChunkEnricher:
-    """Add chunk_summary, keywords, and topics for Agentic RAG."""
+    """Chunk-level enrichment for Agentic RAG."""
 
     def enrich(self, chunks: list[ChunkRecord], metadata: DocumentMetadata) -> list[ChunkRecord]:
         total = len(chunks)
@@ -18,6 +26,7 @@ class ChunkEnricher:
             chunk.service = metadata.service
             chunk.service_category = metadata.service_category
             chunk.source_url = metadata.source_url
+            chunk.document_type = metadata.document_type
             if not chunk.keywords:
                 chunk.keywords = MetadataExtractor.keywords(chunk.content)
             if not chunk.topics:
