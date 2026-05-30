@@ -1,30 +1,29 @@
-# Frontend — Streamlit UI
+# Frontend — Streamlit
 
-Simple Streamlit app that calls the FastAPI ingestion API. No Node/React required.
-
-## Run
-
-Start the API from the repo root:
+## uv (recommended)
 
 ```bash
-uv sync --group ui
-uv run uvicorn app.main:app --reload
+uv sync
+cp .env.example .env
+uv run streamlit run app/main.py
 ```
 
-In another terminal:
+## pip
 
 ```bash
-uv run streamlit run frontend/app.py
+pip install -r requirements.txt
+streamlit run app/main.py
 ```
 
-Open http://localhost:8501
-
-## Configuration
-
-Optional environment variable:
+## Docker
 
 ```bash
-export API_BASE_URL=http://127.0.0.1:8000
+docker build -t aws-docs-streamlit .
+docker run --rm -p 8501:8501 --env-file .env \
+  -e API_BASE_URL=http://host.docker.internal:8000 \
+  aws-docs-streamlit
 ```
 
-Or set the API URL in the sidebar of the app.
+## Docker Compose
+
+From repo root: `docker compose up --build` (uses `API_BASE_URL=http://backend:8000`).

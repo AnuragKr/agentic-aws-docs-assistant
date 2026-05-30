@@ -22,7 +22,7 @@ class S3DocumentLoader(IDocumentLoader):
     ) -> Iterator[RawDocument]:
         if not self._settings.s3_bucket:
             raise ConfigurationError(
-                "S3_BUCKET is not configured. Set it in .env when your bucket is ready."
+                "S3_BUCKET is not configured. Set it in backend/.env when your bucket is ready."
             )
 
         effective_prefix = prefix if prefix is not None else self._settings.s3_prefix

@@ -1,5 +1,5 @@
 [project]
-name = "agentic-aws-docs-assistant"
+name = "agentic-aws-docs-assistant-backend"
 version = "0.1.0"
 description = "Agentic AWS Documentation Assistant — ingestion API"
 readme = "README.md"
@@ -24,10 +24,6 @@ dev = [
     "httpx>=0.28.1",
     "pytest>=9.0.3",
     "ruff>=0.15.14",
-]
-ui = [
-    "httpx>=0.28.1",
-    "streamlit>=1.41.0",
 ]
 
 [build-system]

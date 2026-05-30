@@ -1,46 +1,32 @@
-# Terraform — AWS infrastructure
+# Terraform
 
-Provisions core resources for the documentation assistant ingestion pipeline:
+Single **public EC2** runs Streamlit (`:8501`) and FastAPI (`:8000` on localhost). The instance IAM role reaches S3, OpenSearch, DynamoDB, and Bedrock.
 
-- **S3** — documentation source bucket (versioned, encrypted)
-- **OpenSearch** — vector index domain (HTTPS, fine-grained access)
-- **IAM** — ingestion role (S3 read, OpenSearch HTTP, Bedrock invoke)
+```
+Internet → EC2 (public)
+              ├── :8501 Streamlit (internet)
+              ├── :8000 FastAPI (localhost only)
+              ├── S3 (raw + processed)
+              ├── OpenSearch
+              ├── DynamoDB
+              └── Bedrock
+```
 
-## Prerequisites
-
-- [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.5
-- AWS credentials configured (`aws configure` or environment variables)
-
-## Usage
-
-Variables live in `infrastructure/terraform.tfvars` (not in this directory). From the repo root:
+## Apply
 
 ```bash
-cp infrastructure/terraform.tfvars.example infrastructure/terraform.tfvars
-# Edit infrastructure/terraform.tfvars (bucket name, passwords)
-
 cd infrastructure/terraform
+cp terraform.tfvars.example terraform.tfvars   # first time only
 terraform init
-terraform plan -var-file=../terraform.tfvars
-terraform apply -var-file=../terraform.tfvars
+terraform plan
+terraform apply
 ```
 
-After apply, wire `backend/.env` from outputs:
+`terraform.tfvars` in **this directory** is loaded automatically — no `-var-file` needed.
 
-```bash
-terraform output s3_bucket_name
-terraform output opensearch_endpoint
-```
+## On the EC2 host
 
-```env
-S3_BUCKET=<s3_bucket_name>
-OPENSEARCH_HOST=<opensearch_endpoint without https://>
-OPENSEARCH_AUTH_MODE=aws_sigv4
-OPENSEARCH_INDEX=aws-docs
-```
+- Streamlit `frontend/.env`: `API_BASE_URL=http://127.0.0.1:8000`
+- FastAPI `backend/.env`: use `terraform output` for buckets, OpenSearch, DynamoDB; `OPENSEARCH_AUTH_MODE=aws_sigv4`
 
-For local OpenSearch with basic auth, skip this module and use Docker instead.
-
-## State
-
-By default Terraform uses local state (`terraform.tfstate`) in this directory. For teams, configure a remote backend (S3 + DynamoDB) in `main.tf`.
+URL: `terraform output streamlit_url`

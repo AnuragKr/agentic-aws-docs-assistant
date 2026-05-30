@@ -1,0 +1,4 @@
+# Direct dependencies (sync with pyproject.toml). Pin exact versions: uv export --frozen -o requirements.txt
+httpx>=0.28.1
+python-dotenv>=1.0.0
+streamlit>=1.41.0

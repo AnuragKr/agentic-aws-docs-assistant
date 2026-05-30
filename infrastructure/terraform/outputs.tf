@@ -1,26 +1,24 @@
-output "s3_bucket_name" {
-  description = "Documentation source bucket"
-  value       = aws_s3_bucket.docs.id
+output "ec2_public_ip" {
+  value = aws_instance.app.public_ip
 }
 
-output "s3_bucket_arn" {
-  value = aws_s3_bucket.docs.arn
+output "streamlit_url" {
+  description = "Public UI (FastAPI stays on 127.0.0.1:8000)"
+  value       = "http://${aws_instance.app.public_ip}:8501"
+}
+
+output "raw_bucket" {
+  value = aws_s3_bucket.raw_docs.bucket
+}
+
+output "processed_bucket" {
+  value = aws_s3_bucket.processed_docs.bucket
 }
 
 output "opensearch_endpoint" {
-  description = "OpenSearch HTTPS endpoint (use in OPENSEARCH_HOST)"
-  value       = aws_opensearch_domain.main.endpoint
+  value = aws_opensearch_domain.vector_store.endpoint
 }
 
-output "opensearch_domain_arn" {
-  value = aws_opensearch_domain.main.arn
-}
-
-output "opensearch_dashboard_endpoint" {
-  value = aws_opensearch_domain.main.dashboard_endpoint
-}
-
-output "ingestion_role_arn" {
-  description = "IAM role for the ingestion service (attach to EC2/ECS/Lambda as needed)"
-  value       = aws_iam_role.ingestion.arn
+output "dynamodb_table" {
+  value = aws_dynamodb_table.chat_memory.name
 }

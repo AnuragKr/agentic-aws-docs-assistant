@@ -1,12 +1,16 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_BACKEND_ROOT = Path(__file__).resolve().parents[4]
+_BACKEND_ENV_FILE = _BACKEND_ROOT / ".env"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_BACKEND_ENV_FILE if _BACKEND_ENV_FILE.is_file() else None,
         env_file_encoding="utf-8",
         extra="ignore",
     )

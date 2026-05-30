@@ -1,0 +1,10 @@
+aws_region   = "ap-south-1"
+project_name = "aws-docs-assistant"
+environment  = "dev"
+
+key_pair_name       = "your-keypair"
+ec2_instance_type   = "t3.medium"
+ssh_allowed_cidr    = "" # e.g. "203.0.113.10/32"
+
+raw_bucket_name       = "your-account-aws-docs-raw-dev"
+processed_bucket_name = "your-account-aws-docs-processed-dev"

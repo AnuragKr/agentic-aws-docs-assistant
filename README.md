@@ -1,146 +1,81 @@
 ## AWS Documentation Intelligence Assistant
 
-An Agentic AI-powered chatbot that enables users to interact with AWS documentation using natural language queries.
+Agentic AI chatbot for AWS documentation (RAG, hybrid search, AWS-native deployment).
 
-## Development (uv)
-
-Prerequisites: [uv](https://docs.astral.sh/uv/) and Python 3.11+.
-
-```bash
-# Install dependencies (creates .venv)
-uv sync --dev
-
-# Copy environment template
-cp .env.example .env
-
-# Run API
-uv run uvicorn app.main:app --reload
-
-# Run tests
-uv run pytest
-```
-
-API endpoints:
-
-- `GET /health`
-- `POST /ingestion/start`
-- `POST /ingestion/reindex`
-- `GET /ingestion/status?job_id=<uuid>`
-
-### Project structure
+## Repository layout
 
 ```
 agentic-aws-docs-assistant/
-├── src/app/                # FastAPI backend (Python / uv)
-├── frontend/               # Streamlit UI
-├── terraform/              # AWS: S3, OpenSearch, IAM
-└── tests/
+├── backend/          # FastAPI — own pyproject.toml, uv.lock, requirements.txt, .venv
+├── frontend/         # Streamlit — own pyproject.toml, uv.lock, requirements.txt, .venv
+├── infrastructure/terraform/
+├── docker-compose.yml
+└── README.md
 ```
 
-Backend (`src/app/`):
+No root `uv.lock` or shared Python env — each app is independent.
 
-```
-src/app/
-├── main.py
-├── api/                    # routes, schemas, deps
-├── core/                   # config, container, exceptions
-├── ingestion/              # domain, ports, pipeline, loaders, …
-├── infrastructure/         # AWS & OpenSearch clients
-└── observability/
-```
+| Component | Config | Dependencies |
+|-----------|--------|----------------|
+| Backend | `backend/.env` | `backend/pyproject.toml` + `uv.lock` |
+| Frontend | `frontend/.env` | `frontend/pyproject.toml` + `uv.lock` |
+| Infra | `infrastructure/terraform/terraform.tfvars` | Terraform |
 
-See [frontend/README.md](frontend/README.md) and [terraform/README.md](terraform/README.md) for UI and infrastructure setup.
+## Local development (uv)
 
-### Frontend (Streamlit UI)
+### Backend
 
 ```bash
-uv sync --group ui
-uv run streamlit run frontend/app.py
+cd backend
+uv sync              # creates backend/.venv
+cp .env.example .env
+uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Opens http://localhost:8501 (calls FastAPI on port 8000; set `API_BASE_URL` if needed).
+Dev tools: `uv sync --group dev`
 
-### Terraform (AWS)
+### Frontend
 
 ```bash
-cd terraform
+cd frontend
+uv sync              # creates frontend/.venv (lean — no torch)
+cp .env.example .env
+uv run streamlit run app/main.py
+```
+
+Open http://localhost:8501 — set `API_BASE_URL=http://127.0.0.1:8000` in `frontend/.env`.
+
+## Local development (pip)
+
+```bash
+pip install -r backend/requirements.txt
+pip install -r frontend/requirements.txt
+```
+
+## Docker Compose
+
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+docker compose up --build
+```
+
+- Streamlit: http://localhost:8501  
+- FastAPI: http://localhost:8000 (reachable from frontend container as `http://backend:8000`)
+
+## Infrastructure
+
+```bash
+cd infrastructure/terraform
 cp terraform.tfvars.example terraform.tfvars
 terraform init && terraform apply
 ```
 
-Provisions S3 (docs bucket), OpenSearch domain, and an ingestion IAM role.
-
-### Ingestion pipeline
-
-```
-S3 → parse (txt/md/html) → preprocess → metadata → hierarchical chunk → embed → OpenSearch
-```
-
-Set `S3_BUCKET` (and optionally `S3_PREFIX`) in `.env` when your bucket is ready. Until then, jobs fail fast with a clear configuration error.
-
-Run unit tests (no AWS required):
+## Regenerate lockfiles
 
 ```bash
-uv run pytest tests/unit -q
+cd backend && uv lock
+cd frontend && uv lock
 ```
 
-The application leverages Retrieval-Augmented Generation (RAG), hybrid search, and agentic workflows to provide grounded, context-aware responses based on AWS official documentation.
-
-The project is designed as a scalable AWS-native solution demonstrating modern LLM application architecture and clean engineering practices.
-
-## Objectives
-
-The system aims to demonstrate:
-
-+ LLM-based application design
-+ Agentic workflow orchestration
-+ Retrieval-Augmented Generation (RAG)
-+ Natural language query handling
-+ AWS documentation integration
-+ Scalable and modular architecture
-
-## Scope
-
-The initial version focuses on a text-based conversational experience.
-
-### Included
-
-+ AWS documentation ingestion pipeline
-+ Vector indexing and retrieval
-+ Hybrid search (semantic + keyword)
-+ Query expansion and agentic retrieval workflows
-+ Context-aware response generation
-+ Citation support
-+ Conversational memory
-+ AWS-native deployment
-
-### Out of Scope
-
-The following capabilities are intentionally excluded from the MVP:
-
-+ image/table understanding
-+ multimodal retrieval
-+ voice interaction
-+ infrastructure execution
-autonomous multi-agent systems
-
-These may be added in future iterations.
-
-## High-Level Workflow
-
-```
-User Query
-    ↓
-Query Understanding
-    ↓
-Agentic Retrieval Orchestrator
-    ↓
-Hybrid Retrieval Layer
-    ↓
-Context Selection & Reranking
-    ↓
-LLM Generation
-    ↓
-Grounded Response + Citations
-
-```
+Optional frozen export: `uv export --frozen -o requirements.txt`
