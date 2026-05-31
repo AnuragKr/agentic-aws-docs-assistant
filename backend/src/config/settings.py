@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     )
     embedding_dimension: int = Field(default=384, alias="EMBEDDING_DIMENSION")
     embedding_batch_size: int = Field(default=32, alias="EMBEDDING_BATCH_SIZE")
-    ingestion_max_workers: int = Field(default=4, alias="INGESTION_MAX_WORKERS")
+    ingestion_max_workers: int = Field(default=1, alias="INGESTION_MAX_WORKERS")
 
     opensearch_host: str = Field(default="localhost", alias="OPENSEARCH_HOST")
     opensearch_port: int = Field(default=9200, alias="OPENSEARCH_PORT")

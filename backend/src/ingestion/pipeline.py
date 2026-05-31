@@ -35,7 +35,8 @@ class DocumentIngestionPipeline:
         Load → Preprocess → Extract Metadata → Document Summary → Chunk
         → Enrich → Embed → Store → Update Registry
 
-    Documents are processed in parallel (ThreadPoolExecutor).
+    Documents process one-at-a-time by default (safe on t3.medium EC2).
+    Set INGESTION_MAX_WORKERS>1 only on larger instances.
     """
 
     def __init__(
@@ -51,7 +52,7 @@ class DocumentIngestionPipeline:
         writer: S3ProcessedDocumentWriter,
         indexer: OpenSearchIndexer,
         registry: DynamoDBProcessingRegistry,
-        max_workers: int = 4,
+        max_workers: int = 1,
     ) -> None:
         self._loader = loader
         self._parser = parser_factory
@@ -64,7 +65,7 @@ class DocumentIngestionPipeline:
         self._writer = writer
         self._indexer = indexer
         self._registry = registry
-        self._max_workers = max_workers
+        self._max_workers = max(1, max_workers)
 
     def run(self, run: IngestionRun) -> None:
         run_started = time.perf_counter()
@@ -89,36 +90,38 @@ class DocumentIngestionPipeline:
 
         if pending:
             run.phase = "processing"
-            logger.info("document_parallel_start", count=len(pending), workers=self._max_workers)
-            with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
-                futures = {
-                    executor.submit(self._process_document_safe, source): source for source in pending
-                }
-                for future in as_completed(futures):
-                    source = futures[future]
-                    try:
-                        result = future.result()
-                    except Exception as exc:
-                        result = _DocumentResult(error=str(exc))
-                        logger.exception("document_failed", key=source.key)
+            total = len(pending)
+            logger.info(
+                "document_processing_start",
+                count=total,
+                workers=self._max_workers,
+                mode="sequential" if self._max_workers == 1 else "parallel",
+            )
 
-                    if result.error:
-                        run.documents_failed += 1
-                        run.errors.append(f"{source.key}: {result.error}")
-                        self._registry.upsert(
-                            DocumentRegistryEntry(
-                                document_id=document_id_from_key(source.key),
-                                source_key=source.key,
-                                etag=source.etag,
-                                last_modified=source.last_modified.isoformat(),
-                                status=RegistryStatus.FAILED,
-                                error_message=result.error,
-                            )
-                        )
-                    else:
-                        run.documents_processed += 1
-                        run.chunks_written += result.written
-                        run.embeddings_generated += result.embedded
+            if self._max_workers == 1:
+                for index, source in enumerate(pending, start=1):
+                    logger.info(
+                        "document_progress",
+                        current=index,
+                        total=total,
+                        key=source.key,
+                    )
+                    result = self._process_document_safe(source)
+                    self._apply_result(run, source, result)
+            else:
+                with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+                    futures = {
+                        executor.submit(self._process_document_safe, source): source
+                        for source in pending
+                    }
+                    for future in as_completed(futures):
+                        source = futures[future]
+                        try:
+                            result = future.result()
+                        except Exception as exc:
+                            result = _DocumentResult(error=str(exc))
+                            logger.exception("document_failed", key=source.key)
+                        self._apply_result(run, source, result)
 
         run.phase = "completed"
         logger.info(
@@ -132,11 +135,37 @@ class DocumentIngestionPipeline:
             max_workers=self._max_workers,
         )
 
+    def _apply_result(
+        self,
+        run: IngestionRun,
+        source: SourceObject,
+        result: _DocumentResult,
+    ) -> None:
+        if result.error:
+            run.documents_failed += 1
+            run.errors.append(f"{source.key}: {result.error}")
+            logger.error("document_failed", key=source.key, error=result.error)
+            self._registry.upsert(
+                DocumentRegistryEntry(
+                    document_id=document_id_from_key(source.key),
+                    source_key=source.key,
+                    etag=source.etag,
+                    last_modified=source.last_modified.isoformat(),
+                    status=RegistryStatus.FAILED,
+                    error_message=result.error,
+                )
+            )
+        else:
+            run.documents_processed += 1
+            run.chunks_written += result.written
+            run.embeddings_generated += result.embedded
+
     def _process_document_safe(self, source: SourceObject) -> _DocumentResult:
         try:
             written, embedded = self._process_document(source)
             return _DocumentResult(written=written, embedded=embedded)
         except Exception as exc:
+            logger.exception("document_exception", key=source.key)
             return _DocumentResult(error=str(exc))
 
     def _process_document(self, source: SourceObject) -> tuple[int, int]:

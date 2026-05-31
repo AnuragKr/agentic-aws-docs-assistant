@@ -20,21 +20,25 @@ def main(argv: list[str] | None = None) -> int:
         force_reprocess=args.force_reprocess,
     )
 
+    exit_code = 1
     try:
         container.pipeline.run(run)
+        exit_code = 0 if run.documents_failed == 0 else 1
     except Exception as exc:
         print(f"FAILED: {exc}", file=sys.stderr)
-        return 1
+        run.errors.append(str(exc))
+    finally:
+        print(
+            f"Done — processed={run.documents_processed} skipped={run.documents_skipped} "
+            f"failed={run.documents_failed} chunks={run.chunks_written} "
+            f"embeddings={run.embeddings_generated}",
+            flush=True,
+        )
+        if run.errors:
+            for err in run.errors:
+                print(f"  error: {err}", file=sys.stderr)
 
-    print(
-        f"Done — processed={run.documents_processed} skipped={run.documents_skipped} "
-        f"failed={run.documents_failed} chunks={run.chunks_written} "
-        f"embeddings={run.embeddings_generated}"
-    )
-    if run.errors:
-        for err in run.errors:
-            print(f"  error: {err}", file=sys.stderr)
-    return 0 if run.documents_failed == 0 else 1
+    return exit_code
 
 
 if __name__ == "__main__":
