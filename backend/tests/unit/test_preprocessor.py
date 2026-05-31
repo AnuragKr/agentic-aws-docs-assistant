@@ -4,7 +4,7 @@ from domain.models import ParsedDocument, SectionNode
 from ingestion.preprocessors.pipeline import DocumentPreprocessor
 
 
-def test_preprocessor_preserves_docling_sections() -> None:
+def test_preprocessor_preserves_parser_sections() -> None:
     parsed = ParsedDocument(
         key="lambda/guide.md",
         text="# Lambda\n\nIntro",

@@ -73,6 +73,23 @@ resource "aws_iam_role_policy" "ec2_policy" {
         Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
         Resource = "*"
       },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams",
+        ]
+        Resource = [
+          "${aws_cloudwatch_log_group.ingestion.arn}:*",
+          "${aws_cloudwatch_log_group.system.arn}:*",
+        ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
+        Resource = "*"
+      },
     ]
   })
 }

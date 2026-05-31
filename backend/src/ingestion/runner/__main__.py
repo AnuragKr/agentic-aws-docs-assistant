@@ -13,7 +13,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     container = get_container()
-    setup_logging(container.settings.log_level)
+    setup_logging(container.settings)
 
     run = IngestionRun(
         max_documents=args.max_documents,

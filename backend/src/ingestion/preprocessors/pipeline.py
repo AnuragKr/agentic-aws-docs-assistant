@@ -4,7 +4,7 @@ from ingestion.preprocessors import steps
 
 
 class DocumentPreprocessor:
-    """Lightweight cleanup — hierarchy comes from Docling, not regex."""
+    """Lightweight cleanup — heading hierarchy comes from parsers."""
 
     def process(self, document: ParsedDocument) -> PreprocessedDocument:
         text = document.text

@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     aws_region: str = Field(default="us-east-1", alias="AWS_REGION")
 
+    cloudwatch_logs_enabled: bool = Field(default=False, alias="CLOUDWATCH_LOGS_ENABLED")
+    cloudwatch_log_group: str = Field(default="", alias="CLOUDWATCH_LOG_GROUP")
+    cloudwatch_log_stream: str = Field(default="", alias="CLOUDWATCH_LOG_STREAM")
+
     s3_raw_bucket: str = Field(default="", alias="S3_BUCKET")
     s3_processed_bucket: str = Field(default="", alias="S3_PROCESSED_BUCKET")
     s3_processed_prefix: str = Field(default="processed/", alias="S3_PROCESSED_PREFIX")

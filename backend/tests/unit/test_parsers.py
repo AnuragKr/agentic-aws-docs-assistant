@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from domain.models import RawDocument, SectionNode
 from ingestion.parsers.factory import ParserFactory
+from ingestion.parsers.hierarchy import extract_hierarchy_from_text
 from ingestion.parsers.text import TextParser
 
 
@@ -29,23 +30,25 @@ def test_parser_factory_routes_txt_to_text_parser() -> None:
     assert parsed.text == "Notes"
 
 
-def test_docling_hierarchy_builds_section_tree() -> None:
-    from ingestion.parsers.hierarchy import extract_hierarchy_from_docling
-
-    class FakeItem:
-        def __init__(self, label: str, text: str, level: int = 1):
-            self.label = label
-            self.text = text
-            self.level = level
-
-    class FakeDoc:
-        def iterate_items(self):
-            yield FakeItem("section_header", "Lambda", 1), 1
-            yield FakeItem("text", "Intro paragraph"), 1
-            yield FakeItem("section_header", "Concurrency", 2), 2
-            yield FakeItem("text", "Concurrency details"), 2
-
-    sections = extract_hierarchy_from_docling(FakeDoc())
+def test_markdown_hierarchy_builds_section_tree() -> None:
+    text = "# Lambda\n\nIntro paragraph.\n\n## Concurrency\n\nDetails here."
+    sections = extract_hierarchy_from_text(text)
     assert len(sections) == 1
     assert sections[0].title == "Lambda"
-    assert any(c.title == "Concurrency" for c in sections[0].children)
+    assert sections[0].content.startswith("Intro")
+    assert any(child.title == "Concurrency" for child in sections[0].children)
+
+
+def test_pdf_hierarchy_uses_font_sizes() -> None:
+    from ingestion.parsers.hierarchy import extract_hierarchy_from_pdf_lines
+
+    lines = [
+        ("Lambda", 18.0),
+        ("Intro paragraph.", 11.0),
+        ("Concurrency", 14.0),
+        ("Concurrency details.", 11.0),
+    ]
+    sections = extract_hierarchy_from_pdf_lines(lines)
+    assert len(sections) == 1
+    assert sections[0].title == "Lambda"
+    assert any(child.title == "Concurrency" for child in sections[0].children)

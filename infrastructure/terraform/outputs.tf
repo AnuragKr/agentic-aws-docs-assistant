@@ -26,3 +26,13 @@ output "dynamodb_table" {
 output "document_registry_table" {
   value = aws_dynamodb_table.document_registry.name
 }
+
+output "cloudwatch_ingestion_log_group" {
+  description = "CloudWatch log group for ingestion app logs"
+  value       = aws_cloudwatch_log_group.ingestion.name
+}
+
+output "cloudwatch_system_log_group" {
+  description = "CloudWatch log group for EC2 syslog / OOM killer (via CloudWatch agent)"
+  value       = aws_cloudwatch_log_group.system.name
+}

@@ -7,14 +7,12 @@ requires-python = ">=3.11"
 dependencies = [
     "beautifulsoup4>=4.14.3",
     "boto3>=1.43.16",
-    "docling>=2.0.0",
     "fastapi>=0.136.3",
     "langchain>=0.3.0",
     "langchain-community>=0.3.0",
     "langchain-core>=0.3.0",
     "langchain-text-splitters>=0.3.0",
     "lxml>=6.1.1",
-    "opencv-python-headless>=4.13.0",
     "orjson>=3.10.0",
     "opensearch-py>=3.2.0",
     "pymupdf>=1.25.0",
@@ -26,6 +24,7 @@ dependencies = [
     "tenacity>=9.1.4",
     "tiktoken>=0.8.0",
     "uvicorn>=0.48.0",
+    "watchtower>=3.3.1",
 ]
 
 [dependency-groups]
@@ -53,9 +52,6 @@ packages = ["config", "domain", "infrastructure", "ingestion", "api", "main"]
 
 [tool.uv]
 package = true
-override-dependencies = [
-    "opencv-python-headless>=4.13.0",
-]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

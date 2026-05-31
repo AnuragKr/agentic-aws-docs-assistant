@@ -28,7 +28,7 @@ class IngestionRunResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings = get_settings()
-    setup_logging(settings.log_level)
+    setup_logging(settings)
     get_container()
     yield
 

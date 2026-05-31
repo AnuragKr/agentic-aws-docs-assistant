@@ -32,8 +32,8 @@ class DocumentIngestionPipeline:
     """
     Single orchestration class — read this file to understand ingestion:
 
-        Load → Preprocess → Extract Metadata → Document Summary → Chunk
-        → Enrich → Embed → Store → Update Registry
+        Load → PyMuPDF/Text Parse → Heading Extraction → Preprocess → Metadata
+        → Document Summary → Hierarchical Chunk → Enrich → Embed → Store
 
     Documents process one-at-a-time by default (safe on t3.medium EC2).
     Set INGESTION_MAX_WORKERS>1 only on larger instances.
@@ -175,7 +175,7 @@ class DocumentIngestionPipeline:
         with log_stage("load", document_key=key, size=source.size):
             raw = self._loader.load(source)
 
-        with log_stage("docling", document_key=key):
+        with log_stage("parse", document_key=key):
             parsed = self._parser.parse(raw)
 
         with log_stage("preprocess", document_key=key):
