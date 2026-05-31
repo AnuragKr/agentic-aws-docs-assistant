@@ -11,7 +11,6 @@ from domain.models import IngestionRun
 
 
 class IngestionRunRequest(BaseModel):
-    prefix: str | None = None
     max_documents: int | None = Field(default=None, ge=1)
     force_reprocess: bool = False
 
@@ -52,7 +51,6 @@ def create_app() -> FastAPI:
     @app.post("/ingestion/run", response_model=IngestionRunResponse)
     def run_ingestion(body: IngestionRunRequest) -> IngestionRunResponse:
         run = IngestionRun(
-            prefix=body.prefix,
             max_documents=body.max_documents,
             force_reprocess=body.force_reprocess,
         )

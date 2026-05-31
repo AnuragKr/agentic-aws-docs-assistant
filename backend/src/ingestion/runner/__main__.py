@@ -8,11 +8,6 @@ from domain.models import IngestionRun
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run document ingestion")
-    parser.add_argument(
-        "--prefix",
-        default="",
-        help="S3 prefix under the raw bucket (default: entire bucket / S3_PREFIX from .env)",
-    )
     parser.add_argument("--max-documents", type=int, default=None)
     parser.add_argument("--force-reprocess", action="store_true")
     args = parser.parse_args(argv)
@@ -21,7 +16,6 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging(container.settings.log_level)
 
     run = IngestionRun(
-        prefix=args.prefix or None,
         max_documents=args.max_documents,
         force_reprocess=args.force_reprocess,
     )

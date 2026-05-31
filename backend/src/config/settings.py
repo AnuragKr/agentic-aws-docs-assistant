@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     aws_region: str = Field(default="us-east-1", alias="AWS_REGION")
 
     s3_raw_bucket: str = Field(default="", alias="S3_BUCKET")
-    s3_raw_prefix: str = Field(default="", alias="S3_PREFIX")
     s3_processed_bucket: str = Field(default="", alias="S3_PROCESSED_BUCKET")
     s3_processed_prefix: str = Field(default="processed/", alias="S3_PROCESSED_PREFIX")
 
@@ -52,6 +51,7 @@ class Settings(BaseSettings):
     opensearch_user: str = Field(default="admin", alias="OPENSEARCH_USER")
     opensearch_password: str = Field(default="", alias="OPENSEARCH_PASSWORD")
     opensearch_use_ssl: bool = Field(default=False, alias="OPENSEARCH_USE_SSL")
+    opensearch_timeout: int = Field(default=60, alias="OPENSEARCH_TIMEOUT")
 
     cors_origins: str = Field(
         default="http://localhost:8501,http://127.0.0.1:8501",

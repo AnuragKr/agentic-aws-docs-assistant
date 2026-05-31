@@ -1,8 +1,8 @@
-from opensearchpy import OpenSearch, RequestsHttpConnection
+import boto3
+from opensearchpy import AWSV4SignerAuth, OpenSearch, RequestsHttpConnection
 from opensearchpy.helpers import bulk
-from requests_aws4auth import AWS4Auth
 
-from config.logging import get_logger
+from config.logging import ConfigurationError, get_logger
 from config.settings import Settings
 from config.utils import with_retry
 from domain.models import ChunkRecord
@@ -11,19 +11,41 @@ from ingestion.pipeline_log import log_gap
 logger = get_logger(__name__)
 
 
+def _normalize_host(host: str) -> str:
+    value = host.strip()
+    for prefix in ("https://", "http://"):
+        if value.startswith(prefix):
+            value = value[len(prefix) :]
+    return value.rstrip("/")
+
+
+def _uses_sigv4(auth_mode: str) -> bool:
+    normalized = auth_mode.lower().replace("-", "_")
+    return normalized in {"aws_sigv4", "sigv4", "aws"}
+
+
 def create_opensearch_client(settings: Settings) -> OpenSearch:
-    hosts = [{"host": settings.opensearch_host, "port": settings.opensearch_port}]
+    host = _normalize_host(settings.opensearch_host)
+    if not host:
+        raise ConfigurationError("OPENSEARCH_HOST is not configured")
 
-    if settings.opensearch_auth_mode == "aws_sigv4":
-        import boto3
+    hosts = [{"host": host, "port": settings.opensearch_port}]
+    timeout = settings.opensearch_timeout
 
+    if _uses_sigv4(settings.opensearch_auth_mode):
         credentials = boto3.Session().get_credentials()
-        auth = AWS4Auth(
-            credentials.access_key,
-            credentials.secret_key,
-            settings.aws_region,
-            "es",
-            session_token=credentials.token,
+        if credentials is None:
+            raise ConfigurationError(
+                "AWS credentials not found — OpenSearch requires SigV4 signing on EC2/instance role"
+            )
+
+        auth = AWSV4SignerAuth(credentials, settings.aws_region, "es")
+        logger.info(
+            "opensearch_client",
+            host=host,
+            port=settings.opensearch_port,
+            auth="aws_sigv4",
+            region=settings.aws_region,
         )
         return OpenSearch(
             hosts=hosts,
@@ -31,14 +53,22 @@ def create_opensearch_client(settings: Settings) -> OpenSearch:
             use_ssl=True,
             verify_certs=True,
             connection_class=RequestsHttpConnection,
+            timeout=timeout,
         )
 
+    logger.info(
+        "opensearch_client",
+        host=host,
+        port=settings.opensearch_port,
+        auth="basic",
+    )
     return OpenSearch(
         hosts=hosts,
         http_auth=(settings.opensearch_user, settings.opensearch_password),
         use_ssl=settings.opensearch_use_ssl,
         verify_certs=settings.opensearch_use_ssl,
         connection_class=RequestsHttpConnection,
+        timeout=timeout,
     )
 
 

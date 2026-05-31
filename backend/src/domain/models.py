@@ -15,7 +15,6 @@ class RegistryStatus(StrEnum):
 class IngestionRun(BaseModel):
     """Options and metrics for a single ingestion run (CLI or API)."""
 
-    prefix: str | None = None
     max_documents: int | None = None
     force_reprocess: bool = False
     phase: str | None = None

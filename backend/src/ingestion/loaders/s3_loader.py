@@ -12,20 +12,22 @@ SUPPORTED = {".html", ".htm", ".md", ".markdown", ".txt", ".pdf"}
 
 
 class S3DocumentLoader:
-    """Load documents from the raw S3 bucket."""
+    """List and load documents from the raw S3 bucket (entire bucket)."""
 
-    def __init__(self, bucket: str, region: str, prefix: str = "") -> None:
+    def __init__(self, bucket: str, region: str) -> None:
         if not bucket:
             raise ConfigurationError("S3_BUCKET is not configured")
         self._bucket = bucket
-        self._prefix = prefix
         self._client = boto3.client("s3", region_name=region)
 
+    @property
+    def bucket(self) -> str:
+        return self._bucket
+
     @with_retry()
-    def list_documents(self, prefix: str | None = None) -> Iterator[SourceObject]:
-        effective = prefix if prefix is not None else self._prefix
+    def list_documents(self) -> Iterator[SourceObject]:
         paginator = self._client.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=self._bucket, Prefix=effective):
+        for page in paginator.paginate(Bucket=self._bucket):
             for item in page.get("Contents", []):
                 key = item["Key"]
                 if key.endswith("/"):

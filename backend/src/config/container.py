@@ -23,7 +23,7 @@ class IngestionContainer:
     @cached_property
     def loader(self) -> S3DocumentLoader:
         s = self.settings
-        return S3DocumentLoader(s.s3_raw_bucket, s.aws_region, s.s3_raw_prefix)
+        return S3DocumentLoader(s.s3_raw_bucket, s.aws_region)
 
     @cached_property
     def parser_factory(self) -> ParserFactory:

@@ -3,8 +3,8 @@
 Run document ingestion from the backend directory.
 
   python run_ingestion.py
-  python run_ingestion.py --prefix lambda/
-  python run_ingestion.py --prefix test/ --max-documents 3 --force-reprocess
+  python run_ingestion.py --max-documents 3
+  python run_ingestion.py --force-reprocess
 """
 from __future__ import annotations
 

@@ -61,12 +61,12 @@ class DocumentIngestionPipeline:
             run.phase = phase
 
         tick("scanning")
-        sources = list(self._loader.list_documents(run.prefix))
+        sources = list(self._loader.list_documents())
         if run.max_documents:
             sources = sources[: run.max_documents]
 
         if not sources:
-            log_gap("load", document_key=run.prefix or "", reason="no_documents_found")
+            log_gap("load", document_key=self._loader.bucket, reason="no_documents_found")
 
         self._indexer.ensure_index(self._embeddings.dimension)
 

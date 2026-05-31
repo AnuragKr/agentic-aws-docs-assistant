@@ -38,5 +38,6 @@ cd backend && uv sync
 uv run uvicorn main:app --host 127.0.0.1 --port 8000
 
 # Simple CLI
-python run_ingestion.py --prefix lambda/
+python run_ingestion.py
+python run_ingestion.py --max-documents 3
 ```
