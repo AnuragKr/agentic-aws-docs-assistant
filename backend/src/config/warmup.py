@@ -1,4 +1,4 @@
-from config.logging import get_logger, setup_logging
+from config.logging import get_logger
 from config.settings import get_settings
 from ingestion.embeddings.factory import get_embedding_provider
 from retrieval.reranker import get_reranker

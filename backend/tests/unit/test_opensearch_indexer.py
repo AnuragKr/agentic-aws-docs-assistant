@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock, patch
 
-import pytest
 from opensearchpy.exceptions import TransportError
 
 from config.settings import Settings

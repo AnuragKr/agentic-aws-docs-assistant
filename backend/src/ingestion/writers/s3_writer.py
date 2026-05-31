@@ -1,4 +1,3 @@
-import boto3
 
 from config.logging import ConfigurationError, get_logger, to_json, utc_now_iso
 from config.utils import with_retry

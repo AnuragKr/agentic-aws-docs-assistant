@@ -4,7 +4,6 @@ import re
 from config.logging import get_logger
 from config.settings import Settings
 from config.token_utils import count_tokens, get_token_encoder
-from domain.exceptions import ChunkExplosionError
 from domain.models import ChunkRecord, DocumentMetadata, PreprocessedDocument, SectionNode
 from ingestion.chunkers.sentence_splitter import build_sentence_chunks
 from ingestion.parsers.best_practices import path_label
@@ -51,20 +50,22 @@ class HierarchicalChunker:
             )
 
         merged = self._merge_adjacent_small(chunks, document)
+        # Cap per document: index first N chunks only (see CHUNK_MAX_CHUNKS_PER_DOCUMENT).
+        if len(merged) > self._max_chunks:
+            logger.warning(
+                "chunk_limit_applied",
+                source_key=document.key,
+                chunk_count=len(merged),
+                limit=self._max_chunks,
+                discarded=len(merged) - self._max_chunks,
+            )
+            merged = merged[: self._max_chunks]
+
         total = len(merged)
         for index, chunk in enumerate(merged):
             chunk.chunk_index = index
             chunk.chunk_order = index
             chunk.total_chunks = total
-
-        if total > self._max_chunks:
-            logger.error(
-                "chunk_explosion",
-                source_key=document.key,
-                chunk_count=total,
-                limit=self._max_chunks,
-            )
-            raise ChunkExplosionError(total, self._max_chunks, document.key)
 
         self._log_chunk_token_stats(document.key, merged)
         return merged
@@ -148,8 +149,9 @@ class HierarchicalChunker:
         heading_level = section.level if section else None
 
         for part in self._split_text(text):
+            # Stop early during chunking; post-merge cap handles merge edge cases.
             if len(chunks) >= self._max_chunks:
-                raise ChunkExplosionError(len(chunks) + 1, self._max_chunks, document.key)
+                return
 
             chunk_id = self._chunk_id(document.key, len(chunks), part)
             chunks.append(

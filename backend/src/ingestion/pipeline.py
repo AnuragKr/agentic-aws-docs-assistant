@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 
 from config.logging import get_logger, utc_now_iso
 from config.utils import document_id_from_key
-from domain.exceptions import ChunkExplosionError
 from domain.models import DocumentRegistryEntry, IngestionRun, RegistryStatus, SourceObject
 from infrastructure.aws.dynamodb_registry import DynamoDBProcessingRegistry
 from infrastructure.opensearch.indexer import OpenSearchIndexer
@@ -176,25 +175,6 @@ class DocumentIngestionPipeline:
     ) -> _DocumentResult:
         try:
             return self._process_document(source, force_reprocess)
-        except ChunkExplosionError as exc:
-            logger.error(
-                "chunk_explosion_error",
-                key=source.key,
-                chunk_count=exc.chunk_count,
-                limit=exc.limit,
-            )
-            self._registry.upsert(
-                DocumentRegistryEntry(
-                    document_id=document_id_from_key(source.key),
-                    source_key=source.key,
-                    etag=source.etag,
-                    last_modified=source.last_modified.isoformat(),
-                    status=RegistryStatus.FAILED,
-                    error_message=str(exc),
-                    chunk_count=exc.chunk_count,
-                )
-            )
-            return _DocumentResult(error=str(exc))
         except Exception as exc:
             logger.exception("document_exception", key=source.key)
             self._registry.upsert(

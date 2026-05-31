@@ -1,9 +1,6 @@
 from datetime import datetime, timezone
 
-import pytest
-
 from config.settings import Settings
-from domain.exceptions import ChunkExplosionError
 from domain.models import PreprocessedDocument, SectionNode
 from ingestion.chunkers.hierarchical import HierarchicalChunker
 from ingestion.enrichers.metadata import MetadataExtractor
@@ -60,7 +57,7 @@ def test_hierarchical_chunker_merges_small_chunks() -> None:
     assert len(chunks) == 1
 
 
-def test_hierarchical_chunker_raises_on_explosion() -> None:
+def test_hierarchical_chunker_caps_at_max_chunks() -> None:
     settings = Settings(
         CHUNK_MIN_TOKENS=1,
         CHUNK_MAX_TOKENS=10,
@@ -80,9 +77,10 @@ def test_hierarchical_chunker_raises_on_explosion() -> None:
         sections=sections,
     )
     metadata = MetadataExtractor(settings).extract(doc)
-    with pytest.raises(ChunkExplosionError) as exc_info:
-        HierarchicalChunker(settings).chunk(doc, metadata)
-    assert exc_info.value.chunk_count > settings.chunk_max_chunks_per_document
+    chunks = HierarchicalChunker(settings).chunk(doc, metadata)
+    assert len(chunks) == settings.chunk_max_chunks_per_document
+    assert chunks[-1].chunk_index == settings.chunk_max_chunks_per_document - 1
+    assert all(chunk.total_chunks == settings.chunk_max_chunks_per_document for chunk in chunks)
 
 
 def test_hierarchical_chunker_sets_best_practice_metadata() -> None:

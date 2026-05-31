@@ -31,6 +31,8 @@ class Settings(BaseSettings):
         default="document-registry",
         alias="DYNAMODB_REGISTRY_TABLE",
     )
+    chat_memory_table: str = Field(default="", alias="CHAT_MEMORY_TABLE")
+    chat_memory_max_messages: int = Field(default=20, alias="CHAT_MEMORY_MAX_MESSAGES")
 
     docs_base_url: str = Field(
         default="https://docs.aws.amazon.com",
@@ -65,7 +67,7 @@ class Settings(BaseSettings):
     opensearch_bulk_batch_size: int = Field(default=50, alias="OPENSEARCH_BULK_BATCH_SIZE")
 
     search_vector_k: int = Field(default=20, alias="SEARCH_VECTOR_K")
-    search_rerank_candidates: int = Field(default=5, alias="SEARCH_RERANK_CANDIDATES")
+    search_rerank_candidates: int = Field(default=20, alias="SEARCH_RERANK_CANDIDATES")
     reranker_model_id: str = Field(default="BAAI/bge-reranker-base", alias="RERANKER_MODEL_ID")
     reranker_enabled: bool = Field(default=True, alias="RERANKER_ENABLED")
     warmup_models_on_startup: bool = Field(default=True, alias="WARMUP_MODELS_ON_STARTUP")
@@ -84,6 +86,15 @@ class Settings(BaseSettings):
     generation_max_retries: int = Field(default=3, alias="GENERATION_MAX_RETRIES")
     generation_context_max_tokens: int = Field(default=4500, alias="GENERATION_CONTEXT_MAX_TOKENS")
     generation_rerank_top_k: int = Field(default=5, alias="GENERATION_RERANK_TOP_K")
+
+    agent_enabled: bool = Field(default=True, alias="AGENT_ENABLED")
+    max_query_expansions: int = Field(default=5, alias="MAX_QUERY_EXPANSIONS")
+    conversation_rewrite_turns: int = Field(default=3, alias="CONVERSATION_REWRITE_TURNS")
+    enable_tavily: bool = Field(default=True, alias="ENABLE_TAVILY")
+    max_tool_calls: int = Field(default=1, alias="MAX_TOOL_CALLS")
+    tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
+    tavily_max_results: int = Field(default=3, alias="TAVILY_MAX_RESULTS")
+    retrieval_score_threshold: float = Field(default=-3.0, alias="RETRIEVAL_SCORE_THRESHOLD")
 
     cors_origins: str = Field(
         default="http://localhost:8501,http://127.0.0.1:8501",

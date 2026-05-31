@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from domain.models import RawDocument, SectionNode
+from domain.models import RawDocument
 from ingestion.parsers.factory import ParserFactory
 from ingestion.parsers.hierarchy import extract_hierarchy_from_text
 from ingestion.parsers.text import TextParser

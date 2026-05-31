@@ -3,7 +3,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from config.settings import Settings
-from domain.models import RetrievedChunk
 from retrieval.service import RetrievalService
 
 

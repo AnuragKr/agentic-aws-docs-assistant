@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from functools import cached_property
 
 from config.settings import Settings, get_settings
+from infrastructure.aws.chat_memory import DynamoDBChatMemoryStore
 from infrastructure.aws.dynamodb_registry import DynamoDBProcessingRegistry
 from infrastructure.opensearch.indexer import OpenSearchIndexer, create_opensearch_client
 from infrastructure.opensearch.store import OpenSearchStore
@@ -15,6 +16,7 @@ from ingestion.parsers.factory import ParserFactory
 from ingestion.pipeline import DocumentIngestionPipeline
 from ingestion.preprocessors.pipeline import DocumentPreprocessor
 from ingestion.writers.s3_writer import S3ProcessedDocumentWriter
+from agent.service import AgentService
 from generation.prompt_builder import PromptBuilder
 from generation.providers.bedrock import BedrockGenerationProvider
 from generation.service import GenerationService
@@ -97,6 +99,27 @@ class IngestionContainer:
             provider=self.generation_provider,
             prompt_builder=self.prompt_builder,
             settings=self.settings,
+        )
+
+    @cached_property
+    def chat_memory(self) -> DynamoDBChatMemoryStore | None:
+        s = self.settings
+        if not s.chat_memory_table:
+            return None
+        return DynamoDBChatMemoryStore(
+            s.chat_memory_table,
+            s.aws_region,
+            max_messages=s.chat_memory_max_messages,
+        )
+
+    @cached_property
+    def agent_service(self) -> AgentService:
+        return AgentService.from_container(
+            settings=self.settings,
+            retrieval_service=self.retrieval_service,
+            generation_service=self.generation_service,
+            generation_provider=self.generation_provider,
+            chat_memory=self.chat_memory,
         )
 
     @cached_property

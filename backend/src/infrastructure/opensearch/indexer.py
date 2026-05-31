@@ -1,7 +1,6 @@
 import time
 from dataclasses import dataclass, field
 
-import boto3
 from opensearchpy import AWSV4SignerAuth, OpenSearch, RequestsHttpConnection
 from opensearchpy.exceptions import TransportError
 from opensearchpy.helpers import bulk

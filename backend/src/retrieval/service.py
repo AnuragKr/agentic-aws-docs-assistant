@@ -81,6 +81,26 @@ class RetrievalService:
         )
         return results
 
+    def retrieve_vector_candidates(
+        self,
+        query: str,
+        *,
+        filters: SearchFilters | None = None,
+    ) -> list[RetrievedChunk]:
+        """Vector search only — used by agent retriever node before cross-encoder rerank."""
+        query = query.strip()
+        if not query:
+            return []
+
+        self._store.ensure_index(self._embeddings.dimension)
+        query_vector = self._embeddings.embed_query(query)
+        hits = self._store.vector_search(
+            query_vector,
+            k=self._vector_k,
+            filters=filters,
+        )
+        return [_hit_to_chunk(hit) for hit in hits]
+
 
 def _hit_to_chunk(hit: dict) -> RetrievedChunk:
     source = hit.get("_source", {})

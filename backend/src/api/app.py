@@ -9,6 +9,7 @@ from config.logging import get_logger, setup_logging
 from config.settings import get_settings
 from config.warmup import warmup_models
 from domain.models import IngestionRun, RetrievedChunk
+from domain.chat import ChatMessage
 from generation.exceptions import GenerationError
 from generation.models import GenerationRequest, GenerationResponse
 from retrieval.filters import SearchFilters
@@ -71,6 +72,19 @@ class AskResponse(BaseModel):
     retrieval_count: int
 
 
+class ChatRequest(BaseModel):
+    query: str = Field(min_length=1)
+    conversation_history: list[ChatMessage] = Field(default_factory=list)
+    session_id: str | None = None
+    filters: SearchFiltersRequest | None = None
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    sources: list[dict]
+    external_search_used: bool = False
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings = get_settings()
@@ -107,6 +121,7 @@ def create_app() -> FastAPI:
             "service": settings.app_name,
             "opensearch": opensearch,
             "reranker_enabled": settings.reranker_enabled,
+            "agent_enabled": settings.agent_enabled,
         }
 
     @app.post("/ingestion/run", response_model=IngestionRunResponse)
@@ -205,6 +220,38 @@ def create_app() -> FastAPI:
             model_id=generation.model_id,
             latency_ms=generation.latency_ms,
             retrieval_count=len(chunks),
+        )
+
+    @app.post("/chat", response_model=ChatResponse)
+    def chat(body: ChatRequest) -> ChatResponse:
+        """Conversational agent — LangGraph orchestration with guardrails and optional Tavily."""
+        query = body.query.strip()
+        if not query:
+            raise HTTPException(status_code=400, detail="Query must not be empty")
+
+        container = get_container()
+        if not container.settings.agent_enabled:
+            raise HTTPException(status_code=503, detail="Agent is disabled")
+
+        filters = None
+        if body.filters and not _filters_empty(body.filters):
+            filters = body.filters.model_dump()
+
+        try:
+            result = container.agent_service.run(
+                query,
+                conversation_history=body.conversation_history,
+                session_id=body.session_id,
+                filters=filters,
+            )
+        except Exception as exc:
+            logger.exception("chat_failed", query_len=len(query))
+            raise HTTPException(status_code=503, detail=f"Chat failed: {exc}") from exc
+
+        return ChatResponse(
+            answer=result.answer,
+            sources=[source.model_dump() for source in result.sources],
+            external_search_used=result.external_search_used,
         )
 
     return app

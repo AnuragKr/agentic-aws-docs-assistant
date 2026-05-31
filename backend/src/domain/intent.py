@@ -1,0 +1,9 @@
+from enum import StrEnum
+
+
+class QueryIntent(StrEnum):
+    EXPLAIN = "EXPLAIN"
+    COMPARE = "COMPARE"
+    SUMMARIZE_CONVERSATION = "SUMMARIZE_CONVERSATION"
+    HOW_TO = "HOW_TO"
+    TROUBLESHOOT = "TROUBLESHOOT"
