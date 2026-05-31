@@ -17,11 +17,12 @@ class HierarchicalChunker:
     """
     Custom hierarchical chunker (Strategy pattern).
 
-    Heading → Subheading → semantic paragraph groups.
-    LangChain splitter used ONLY as fallback when a section exceeds token limit.
+    Heading → Subheading → semantic paragraph groups (leaf sections only).
+    Targets 800–1200 tokens with 10–20% overlap; LangChain fallback for oversized text.
     """
 
     def __init__(self, settings: Settings) -> None:
+        self._min_tokens = settings.chunk_min_tokens
         self._max_tokens = settings.chunk_max_tokens
         self._overlap_tokens = settings.chunk_overlap_tokens
         self._encoder = get_token_encoder()
@@ -50,8 +51,21 @@ class HierarchicalChunker:
                 subsection=None,
                 heading_level=None,
             )
-        logger.info("chunks_created", source_key=document.key, count=len(chunks))
-        return chunks
+
+        merged = self._merge_small_chunks(chunks, document, metadata)
+        total = len(merged)
+        for index, chunk in enumerate(merged):
+            chunk.chunk_index = index
+            chunk.total_chunks = total
+
+        logger.info(
+            "chunks_created",
+            source_key=document.key,
+            count=total,
+            min_tokens=self._min_tokens,
+            max_tokens=self._max_tokens,
+        )
+        return merged
 
     def _chunk_section(
         self,
@@ -62,10 +76,20 @@ class HierarchicalChunker:
         hierarchy: list[tuple[str, int]],
     ) -> None:
         hierarchy = hierarchy + [(section.title, section.level)]
+
+        if section.children:
+            for child in section.children:
+                self._chunk_section(child, document, metadata, chunks, hierarchy)
+            return
+
+        text = section.content.strip()
+        if not text:
+            return
+
         section_name = hierarchy[1][0] if len(hierarchy) > 1 else hierarchy[0][0]
         subsection = hierarchy[2][0] if len(hierarchy) > 2 else None
         self._chunk_text(
-            section.content or document.text,
+            text,
             document=document,
             metadata=metadata,
             chunks=chunks,
@@ -73,8 +97,6 @@ class HierarchicalChunker:
             subsection=subsection,
             heading_level=section.level,
         )
-        for child in section.children:
-            self._chunk_section(child, document, metadata, chunks, hierarchy)
 
     def _chunk_text(
         self,
@@ -111,23 +133,77 @@ class HierarchicalChunker:
             )
 
     def _split_by_paragraphs(self, text: str) -> list[str]:
-        """Group paragraphs semantically; fallback to LangChain only if too large."""
+        """Group paragraphs toward min/max token targets; fallback split if oversized."""
         parts: list[str] = []
         paragraphs = [p.strip() for p in re.split(r"\n\n+", text) if p.strip()]
         buffer = ""
 
         for para in paragraphs:
             candidate = f"{buffer}\n\n{para}".strip() if buffer else para
-            if count_tokens(candidate, self._encoder) <= self._max_tokens:
+            token_count = count_tokens(candidate, self._encoder)
+
+            if token_count <= self._max_tokens:
                 buffer = candidate
-            else:
-                if buffer:
-                    parts.extend(self._maybe_fallback_split(buffer))
+                continue
+
+            if buffer:
+                parts.extend(self._emit_parts(buffer))
+                buffer = ""
+
+            if count_tokens(para, self._encoder) <= self._max_tokens:
                 buffer = para
+            else:
+                parts.extend(self._maybe_fallback_split(para))
 
         if buffer:
-            parts.extend(self._maybe_fallback_split(buffer))
+            parts.extend(self._emit_parts(buffer))
         return parts
+
+    def _emit_parts(self, text: str) -> list[str]:
+        tokens = count_tokens(text, self._encoder)
+        if tokens <= self._max_tokens:
+            return [text]
+        return self._maybe_fallback_split(text)
+
+    def _merge_small_chunks(
+        self,
+        chunks: list[ChunkRecord],
+        document: PreprocessedDocument,
+        metadata: DocumentMetadata,
+    ) -> list[ChunkRecord]:
+        if len(chunks) <= 1:
+            return chunks
+
+        merged: list[ChunkRecord] = []
+        for chunk in chunks:
+            chunk_tokens = count_tokens(chunk.content, self._encoder)
+            if (
+                merged
+                and chunk_tokens < self._min_tokens
+                and count_tokens(merged[-1].content, self._encoder) < self._min_tokens
+            ):
+                combined = f"{merged[-1].content}\n\n{chunk.content}"
+                if count_tokens(combined, self._encoder) <= self._max_tokens:
+                    prev = merged[-1]
+                    merged[-1] = prev.model_copy(
+                        update={
+                            "content": combined,
+                            "chunk_id": self._chunk_id(
+                                document.key,
+                                len(merged) - 1,
+                                combined,
+                            ),
+                            "content_type": (
+                                "code"
+                                if CODE_FENCE_RE.search(combined)
+                                else prev.content_type
+                            ),
+                        }
+                    )
+                    continue
+            merged.append(chunk)
+
+        return merged
 
     def _maybe_fallback_split(self, text: str) -> list[str]:
         if count_tokens(text, self._encoder) <= self._max_tokens:

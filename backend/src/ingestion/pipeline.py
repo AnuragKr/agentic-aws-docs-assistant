@@ -1,6 +1,6 @@
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from config.logging import get_logger, utc_now_iso
 from config.utils import document_id_from_key
@@ -25,7 +25,9 @@ logger = get_logger(__name__)
 class _DocumentResult:
     written: int = 0
     embedded: int = 0
+    indexed: int = 0
     error: str | None = None
+    warnings: list[str] = field(default_factory=list)
 
 
 class DocumentIngestionPipeline:
@@ -33,7 +35,7 @@ class DocumentIngestionPipeline:
     Single orchestration class — read this file to understand ingestion:
 
         Load → PyMuPDF/Text Parse → Heading Extraction → Preprocess → Metadata
-        → Document Summary → Hierarchical Chunk → Enrich → Embed → Store
+        → Document Summary → Hierarchical Chunk → Enrich → Embed → S3 → OpenSearch
 
     Documents process one-at-a-time by default (safe on t3.medium EC2).
     Set INGESTION_MAX_WORKERS>1 only on larger instances.
@@ -159,18 +161,20 @@ class DocumentIngestionPipeline:
             run.documents_processed += 1
             run.chunks_written += result.written
             run.embeddings_generated += result.embedded
+            for warning in result.warnings:
+                run.errors.append(f"{source.key}: {warning}")
 
     def _process_document_safe(self, source: SourceObject) -> _DocumentResult:
         try:
-            written, embedded = self._process_document(source)
-            return _DocumentResult(written=written, embedded=embedded)
+            return self._process_document(source)
         except Exception as exc:
             logger.exception("document_exception", key=source.key)
             return _DocumentResult(error=str(exc))
 
-    def _process_document(self, source: SourceObject) -> tuple[int, int]:
+    def _process_document(self, source: SourceObject) -> _DocumentResult:
         key = source.key
         doc_started = time.perf_counter()
+        result = _DocumentResult()
 
         with log_stage("load", document_key=key, size=source.size):
             raw = self._loader.load(source)
@@ -182,7 +186,7 @@ class DocumentIngestionPipeline:
             document = self._preprocessor.process(parsed)
             if not document.text.strip():
                 log_gap("preprocess", document_key=key, reason="empty_document")
-                return 0, 0
+                return result
 
         with log_stage("extract_metadata", document_key=key):
             metadata = self._metadata.extract(document)
@@ -204,7 +208,7 @@ class DocumentIngestionPipeline:
             chunks = self._chunker.chunk(document, metadata)
             if not chunks:
                 log_gap("chunk", document_key=key, reason="zero_chunks")
-                return 0, 0
+                return result
 
         with log_stage("enrich", document_key=key, chunk_count=len(chunks)):
             chunks = self._enricher.enrich(chunks, metadata)
@@ -219,13 +223,12 @@ class DocumentIngestionPipeline:
                     chunks=len(chunks),
                     vectors=len(vectors),
                 )
-                return 0, 0
+                return result
             for chunk, vector in zip(chunks, vectors, strict=True):
                 chunk.embedding = vector
 
-        with log_stage("store", document_key=key, chunk_count=len(chunks)):
-            written = self._writer.write(document, metadata, chunks)
-            indexed = self._indexer.index(chunks, key)
+        with log_stage("store_s3", document_key=key, chunk_count=len(chunks)):
+            result.written = self._writer.write(document, metadata, chunks)
 
         self._registry.upsert(
             DocumentRegistryEntry(
@@ -233,17 +236,41 @@ class DocumentIngestionPipeline:
                 source_key=key,
                 etag=source.etag,
                 last_modified=source.last_modified.isoformat(),
-                status=RegistryStatus.COMPLETED,
+                status=RegistryStatus.STORED,
                 processed_at=utc_now_iso(),
+            )
+        )
+
+        with log_stage("store_opensearch", document_key=key, chunk_count=len(chunks)):
+            index_result = self._indexer.index(chunks, key)
+
+        result.indexed = index_result.indexed
+        result.embedded = len(vectors)
+
+        index_error: str | None = None
+        if index_result.batch_errors:
+            index_error = "; ".join(index_result.batch_errors)
+            result.warnings.append(f"partial indexing: {index_error}")
+
+        self._registry.upsert(
+            DocumentRegistryEntry(
+                document_id=metadata.document_id,
+                source_key=key,
+                etag=source.etag,
+                last_modified=source.last_modified.isoformat(),
+                status=RegistryStatus.INDEXED,
+                processed_at=utc_now_iso(),
+                error_message=index_error,
             )
         )
 
         logger.info(
             "document_metrics",
             source_key=key,
-            chunks_created=written,
-            embeddings_generated=len(vectors),
-            opensearch_indexed=indexed,
+            chunks_created=result.written,
+            embeddings_generated=result.embedded,
+            opensearch_indexed=result.indexed,
+            opensearch_failed=index_result.failed,
             processing_duration_ms=round((time.perf_counter() - doc_started) * 1000, 2),
         )
-        return written, len(vectors)
+        return result

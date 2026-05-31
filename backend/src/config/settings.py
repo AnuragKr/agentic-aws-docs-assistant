@@ -37,9 +37,10 @@ class Settings(BaseSettings):
         alias="DOCS_BASE_URL",
     )
 
-    # 800–1200 tokens target, 100–150 overlap (tiktoken)
-    chunk_max_tokens: int = Field(default=1000, alias="CHUNK_MAX_TOKENS")
-    chunk_overlap_tokens: int = Field(default=125, alias="CHUNK_OVERLAP_TOKENS")
+    # 800–1200 token target, 10–20% overlap (tiktoken)
+    chunk_min_tokens: int = Field(default=800, alias="CHUNK_MIN_TOKENS")
+    chunk_max_tokens: int = Field(default=1200, alias="CHUNK_MAX_TOKENS")
+    chunk_overlap_tokens: int = Field(default=150, alias="CHUNK_OVERLAP_TOKENS")
 
     embedding_provider: str = Field(default="huggingface", alias="EMBEDDING_PROVIDER")
     embedding_model_id: str = Field(
@@ -58,6 +59,7 @@ class Settings(BaseSettings):
     opensearch_password: str = Field(default="", alias="OPENSEARCH_PASSWORD")
     opensearch_use_ssl: bool = Field(default=False, alias="OPENSEARCH_USE_SSL")
     opensearch_timeout: int = Field(default=60, alias="OPENSEARCH_TIMEOUT")
+    opensearch_bulk_batch_size: int = Field(default=50, alias="OPENSEARCH_BULK_BATCH_SIZE")
 
     cors_origins: str = Field(
         default="http://localhost:8501,http://127.0.0.1:8501",

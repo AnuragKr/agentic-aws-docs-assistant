@@ -7,9 +7,16 @@ from pydantic import BaseModel, Field
 class RegistryStatus(StrEnum):
     PENDING = "pending"
     PROCESSING = "processing"
+    STORED = "stored"
+    INDEXED = "indexed"
     COMPLETED = "completed"
     FAILED = "failed"
     SKIPPED = "skipped"
+
+    @classmethod
+    def fully_processed(cls) -> frozenset["RegistryStatus"]:
+        """Statuses that mean ingestion finished successfully."""
+        return frozenset({cls.INDEXED, cls.COMPLETED})
 
 
 class IngestionRun(BaseModel):

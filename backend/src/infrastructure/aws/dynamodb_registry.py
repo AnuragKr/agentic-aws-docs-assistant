@@ -32,5 +32,5 @@ class DynamoDBProcessingRegistry:
         return (
             existing.etag == source.etag
             and existing.last_modified == source.last_modified.isoformat()
-            and existing.status == RegistryStatus.COMPLETED
+            and existing.status in RegistryStatus.fully_processed()
         )
