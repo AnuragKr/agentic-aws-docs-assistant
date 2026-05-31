@@ -3,7 +3,9 @@ import sys
 
 from config.container import get_container
 from config.logging import setup_logging
+from config.settings import get_settings
 from domain.models import IngestionRun
+from ingestion.runner.preflight import validate_ingestion_preflight
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -12,8 +14,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--force-reprocess", action="store_true")
     args = parser.parse_args(argv)
 
+    settings = get_settings()
+    setup_logging(settings)
+    validate_ingestion_preflight(settings)
+
     container = get_container()
-    setup_logging(container.settings)
 
     run = IngestionRun(
         max_documents=args.max_documents,

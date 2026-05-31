@@ -10,7 +10,7 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 from config.logging import ConfigurationError, get_logger
 from config.settings import Settings
 from domain.models import ChunkRecord
-from infrastructure.aws.session import get_boto_session
+from infrastructure.aws.session import resolve_aws_credentials
 from infrastructure.opensearch.mappings import index_mappings
 from ingestion.pipeline_log import log_gap
 
@@ -52,12 +52,7 @@ def create_opensearch_client(settings: Settings) -> OpenSearch:
     timeout = settings.opensearch_timeout
 
     if _uses_sigv4(settings.opensearch_auth_mode):
-        credentials = get_boto_session(settings.aws_region).get_credentials()
-        if credentials is None:
-            raise ConfigurationError(
-                "AWS credentials not found — OpenSearch requires SigV4 signing on EC2/instance role"
-            )
-
+        credentials = resolve_aws_credentials(settings.aws_region)
         auth = AWSV4SignerAuth(credentials, settings.aws_region, "es")
         logger.info(
             "opensearch_client",

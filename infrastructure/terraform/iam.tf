@@ -52,7 +52,10 @@ resource "aws_iam_role_policy" "ec2_policy" {
           "es:ESHttpDelete",
           "es:ESHttpHead",
         ]
-        Resource = "${aws_opensearch_domain.vector_store.arn}/*"
+        Resource = [
+          aws_opensearch_domain.vector_store.arn,
+          "${aws_opensearch_domain.vector_store.arn}/*",
+        ]
       },
       {
         Effect = "Allow"

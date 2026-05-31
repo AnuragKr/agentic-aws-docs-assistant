@@ -29,6 +29,8 @@ resource "aws_opensearch_domain" "vector_store" {
     Statement = [{
       Effect = "Allow"
       Principal = {
+        # Role ARN only — OpenSearch rejects "roleArn/*" in Principal.AWS (InvalidTypeException).
+        # EC2 instance profile access works via assumed-role sessions of this role.
         AWS = aws_iam_role.ec2_role.arn
       }
       Action   = "es:*"
