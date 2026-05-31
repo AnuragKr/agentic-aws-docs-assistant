@@ -21,4 +21,5 @@ class DocumentPreprocessor:
             etag=document.etag,
             last_modified=document.last_modified,
             sections=document.sections,
+            total_pages=document.total_pages,
         )

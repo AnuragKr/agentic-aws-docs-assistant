@@ -5,6 +5,7 @@ from config.settings import Settings
 from config.logging import get_logger
 from config.utils import document_id_from_key
 from domain.models import DocumentMetadata, PreprocessedDocument
+from ingestion.enrichers.aws_services import detect_aws_services
 
 logger = get_logger(__name__)
 
@@ -36,30 +37,48 @@ class MetadataExtractor:
 
     def extract(self, document: PreprocessedDocument) -> DocumentMetadata:
         parts = [p for p in document.key.split("/") if p]
-        title = self._title(document, parts)
+        source_file = parts[-1] if parts else document.key
+        title = self._title(document, parts, source_file)
         service, category = self._service_and_category(parts)
+        services = detect_aws_services(document.text)
+
+        if service and service not in services:
+            services = sorted({service, *services})
 
         metadata = DocumentMetadata(
             document_id=document_id_from_key(document.key),
             title=title,
             service=service,
             service_category=category,
+            services=services,
             source_url=f"{self._docs_base}/{document.key}",
-            document_type=self._document_type(parts),
+            source_file=source_file,
+            document_type=self._document_type(parts, source_file),
             source_key=document.key,
             last_modified=document.last_modified,
             etag=document.etag,
+            total_pages=document.total_pages,
             sections=document.sections,
         )
-        logger.info("metadata_extracted", document_id=metadata.document_id, service=service)
+        logger.info(
+            "metadata_extracted",
+            document_id=metadata.document_id,
+            service=service,
+            services=len(services),
+            total_pages=metadata.total_pages,
+        )
         return metadata
 
     @staticmethod
-    def _title(document: PreprocessedDocument, parts: list[str]) -> str:
+    def _title(
+        document: PreprocessedDocument,
+        parts: list[str],
+        source_file: str,
+    ) -> str:
         if document.sections:
             return document.sections[0].title
-        name = parts[-1] if parts else document.key
-        return re.sub(r"\.[^.]+$", "", name).replace("-", " ").replace("_", " ").title()
+        name = re.sub(r"\.[^.]+$", "", source_file)
+        return name.replace("-", " ").replace("_", " ").title()
 
     @staticmethod
     def _service_and_category(parts: list[str]) -> tuple[str | None, str | None]:
@@ -75,11 +94,20 @@ class MetadataExtractor:
         return service, category
 
     @staticmethod
-    def _document_type(parts: list[str]) -> str | None:
-        joined = "/".join(parts).lower()
-        for label in ("best-practices", "api-reference", "guide", "developer-guide"):
+    def _document_type(parts: list[str], source_file: str) -> str | None:
+        joined = "/".join([*parts, source_file]).lower()
+        for label in (
+            "well-architected",
+            "security-pillar",
+            "best-practices",
+            "api-reference",
+            "guide",
+            "developer-guide",
+        ):
             if label in joined:
-                return label
+                return label.replace("-", "_")
+        if source_file.lower().endswith(".pdf"):
+            return "pdf"
         return None
 
     @staticmethod

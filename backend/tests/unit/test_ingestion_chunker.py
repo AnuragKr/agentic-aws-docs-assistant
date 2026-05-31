@@ -49,8 +49,7 @@ def test_hierarchical_chunker_merges_small_chunks() -> None:
         etag="1",
         last_modified=datetime.now(timezone.utc),
         sections=[
-            SectionNode(title="A", level=1, content="Tiny section A."),
-            SectionNode(title="B", level=1, content="Tiny section B."),
+            SectionNode(title="Chapter", level=1, content="Tiny section A.\n\nTiny section B."),
         ],
     )
     metadata = MetadataExtractor(settings).extract(doc)

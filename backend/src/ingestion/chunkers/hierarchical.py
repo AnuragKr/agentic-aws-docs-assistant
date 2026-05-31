@@ -40,22 +40,23 @@ class HierarchicalChunker:
         chunks: list[ChunkRecord] = []
         if document.sections:
             for section in document.sections:
-                self._chunk_section(section, document, metadata, chunks, hierarchy=[])
+                self._chunk_section(section, document, metadata, chunks, hierarchy_path=[])
         else:
             self._chunk_text(
                 document.text,
                 document=document,
                 metadata=metadata,
                 chunks=chunks,
-                section=None,
-                subsection=None,
+                hierarchy_path=[],
                 heading_level=None,
+                page_number=None,
             )
 
         merged = self._merge_small_chunks(chunks, document, metadata)
         total = len(merged)
         for index, chunk in enumerate(merged):
             chunk.chunk_index = index
+            chunk.chunk_order = index
             chunk.total_chunks = total
 
         logger.info(
@@ -73,29 +74,27 @@ class HierarchicalChunker:
         document: PreprocessedDocument,
         metadata: DocumentMetadata,
         chunks: list[ChunkRecord],
-        hierarchy: list[tuple[str, int]],
+        hierarchy_path: list[str],
     ) -> None:
-        hierarchy = hierarchy + [(section.title, section.level)]
+        path = hierarchy_path + [section.title]
 
         if section.children:
             for child in section.children:
-                self._chunk_section(child, document, metadata, chunks, hierarchy)
+                self._chunk_section(child, document, metadata, chunks, path)
             return
 
         text = section.content.strip()
         if not text:
             return
 
-        section_name = hierarchy[1][0] if len(hierarchy) > 1 else hierarchy[0][0]
-        subsection = hierarchy[2][0] if len(hierarchy) > 2 else None
         self._chunk_text(
             text,
             document=document,
             metadata=metadata,
             chunks=chunks,
-            section=section_name,
-            subsection=subsection,
+            hierarchy_path=path,
             heading_level=section.level,
+            page_number=section.page_start,
         )
 
     def _chunk_text(
@@ -105,12 +104,14 @@ class HierarchicalChunker:
         document: PreprocessedDocument,
         metadata: DocumentMetadata,
         chunks: list[ChunkRecord],
-        section: str | None,
-        subsection: str | None,
+        hierarchy_path: list[str],
         heading_level: int | None,
+        page_number: int | None,
     ) -> None:
         if not text.strip():
             return
+
+        section, subsection = _section_labels(hierarchy_path)
 
         for part in self._split_by_paragraphs(text):
             chunk_id = self._chunk_id(document.key, len(chunks), part)
@@ -121,11 +122,16 @@ class HierarchicalChunker:
                     content=part,
                     service=metadata.service,
                     service_category=metadata.service_category,
+                    services=list(metadata.services),
                     title=metadata.title,
                     section=section,
                     subsection=subsection,
+                    hierarchy_path=list(hierarchy_path),
                     source_url=metadata.source_url,
+                    source_file=metadata.source_file,
                     document_type=metadata.document_type,
+                    page_number=page_number,
+                    total_pages=metadata.total_pages,
                     content_type="code" if CODE_FENCE_RE.search(part) else "text",
                     chunk_level="semantic",
                     heading_level=heading_level,
@@ -181,6 +187,7 @@ class HierarchicalChunker:
                 merged
                 and chunk_tokens < self._min_tokens
                 and count_tokens(merged[-1].content, self._encoder) < self._min_tokens
+                and merged[-1].hierarchy_path == chunk.hierarchy_path
             ):
                 combined = f"{merged[-1].content}\n\n{chunk.content}"
                 if count_tokens(combined, self._encoder) <= self._max_tokens:
@@ -215,3 +222,12 @@ class HierarchicalChunker:
     def _chunk_id(key: str, index: int, text: str) -> str:
         raw = f"{key}|{index}|{text[:64]}"
         return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _section_labels(hierarchy_path: list[str]) -> tuple[str | None, str | None]:
+    if not hierarchy_path:
+        return None, None
+    if len(hierarchy_path) == 1:
+        return hierarchy_path[0], None
+    subsection = hierarchy_path[2] if len(hierarchy_path) > 2 else None
+    return hierarchy_path[1], subsection

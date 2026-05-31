@@ -55,12 +55,15 @@ class ParsedDocument(BaseModel):
     etag: str
     last_modified: datetime
     sections: list["SectionNode"] = Field(default_factory=list)
+    total_pages: int = 0
 
 
 class SectionNode(BaseModel):
     title: str
     level: int
     content: str = ""
+    page_start: int | None = None
+    page_end: int | None = None
     children: list["SectionNode"] = Field(default_factory=list)
 
 
@@ -71,6 +74,7 @@ class PreprocessedDocument(BaseModel):
     etag: str
     last_modified: datetime
     sections: list[SectionNode] = Field(default_factory=list)
+    total_pages: int = 0
 
 
 class DocumentMetadata(BaseModel):
@@ -80,12 +84,15 @@ class DocumentMetadata(BaseModel):
     title: str
     service: str | None = None
     service_category: str | None = None
+    services: list[str] = Field(default_factory=list)
     source_url: str
+    source_file: str = ""
     document_type: str | None = None
     source_key: str
     last_modified: datetime
     etag: str
     document_summary: str = ""
+    total_pages: int = 0
     sections: list[SectionNode] = Field(default_factory=list)
 
 
@@ -97,16 +104,24 @@ class ChunkRecord(BaseModel):
     content: str
     service: str | None = None
     service_category: str | None = None
+    services: list[str] = Field(default_factory=list)
     title: str = ""
     section: str | None = None
     subsection: str | None = None
+    hierarchy_path: list[str] = Field(default_factory=list)
     source_url: str = ""
+    source_file: str = ""
     document_type: str | None = None
     chunk_summary: str = ""
     keywords: list[str] = Field(default_factory=list)
     topics: list[str] = Field(default_factory=list)
     chunk_index: int = 0
+    chunk_order: int = 0
     total_chunks: int = 0
+    page_number: int | None = None
+    total_pages: int = 0
+    prev_chunk_id: str | None = None
+    next_chunk_id: str | None = None
     content_type: str = "text"
     chunk_level: str = "semantic"
     heading_level: int | None = None
