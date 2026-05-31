@@ -45,6 +45,29 @@ uv run python run_ingestion.py --force-reprocess --max-documents 1
 
 URL: `terraform output streamlit_url`
 
+### Docker on EC2
+
+```bash
+cd ~/agentic-aws-docs-assistant
+git pull
+
+# Configure env from terraform output
+cp backend/.env.example backend/.env   # edit with real values
+cp frontend/.env.example frontend/.env
+
+# Build and run (API on localhost:8000, Streamlit on :8501)
+docker compose up -d --build
+
+# First start may take several minutes (reranker download). Check logs:
+docker compose logs -f backend
+
+# Optional: run ingestion in container (uses instance profile)
+docker compose --profile ingestion run --rm ingestion --force-reprocess --max-documents 1
+```
+
+Do **not** pass `sudo` — it breaks the instance profile inside containers on some setups.
+Do **not** set empty `AWS_ACCESS_KEY_ID` in `backend/.env`.
+
 ### EC2 troubleshooting
 
 | Symptom | Fix |

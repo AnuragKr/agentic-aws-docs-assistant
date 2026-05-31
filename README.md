@@ -57,11 +57,17 @@ pip install -r frontend/requirements.txt
 ```bash
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
-docker compose up --build
+docker compose up -d --build
 ```
 
-- Streamlit: http://localhost:8501  
-- FastAPI: http://localhost:8000 (reachable from frontend container as `http://backend:8000`)
+- Streamlit: http://localhost:8501 (on EC2: `http://<public-ip>:8501`)
+- FastAPI: http://127.0.0.1:8000 on the host (not exposed on `0.0.0.0`; frontend uses `http://backend:8000` in the compose network)
+
+**Ingestion in Docker:**
+
+```bash
+docker compose --profile ingestion run --rm ingestion --force-reprocess --max-documents 3
+```
 
 ## Infrastructure
 
