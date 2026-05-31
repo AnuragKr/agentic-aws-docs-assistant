@@ -9,6 +9,8 @@ from config.logging import get_logger, setup_logging
 from config.settings import get_settings
 from config.warmup import warmup_models
 from domain.models import IngestionRun, RetrievedChunk
+from generation.exceptions import GenerationError
+from generation.models import GenerationRequest, GenerationResponse
 from retrieval.filters import SearchFilters
 
 logger = get_logger(__name__)
@@ -47,6 +49,26 @@ class SearchRequest(BaseModel):
 class SearchResponse(BaseModel):
     query: str
     results: list[RetrievedChunk]
+
+
+class GenerateRequest(BaseModel):
+    question: str = Field(min_length=1)
+    chunks: list[RetrievedChunk] = Field(default_factory=list)
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=1)
+    top_k: int = Field(default=5, ge=1, le=20)
+    filters: SearchFiltersRequest | None = None
+
+
+class AskResponse(BaseModel):
+    query: str
+    answer: str
+    sources: list[dict]
+    model_id: str
+    latency_ms: float
+    retrieval_count: int
 
 
 @asynccontextmanager
@@ -125,6 +147,65 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=503, detail=f"Search failed: {exc}") from exc
 
         return SearchResponse(query=query, results=results)
+
+    @app.post("/generate", response_model=GenerationResponse)
+    def generate(body: GenerateRequest) -> GenerationResponse:
+        question = body.question.strip()
+        if not question:
+            raise HTTPException(status_code=400, detail="Question must not be empty")
+        if not body.chunks:
+            raise HTTPException(
+                status_code=400,
+                detail="Retrieved chunks are required. Call /search first or use /ask.",
+            )
+
+        try:
+            return get_container().generation_service.generate(
+                GenerationRequest(question=question, retrieved_chunks=body.chunks)
+            )
+        except GenerationError as exc:
+            logger.exception("generation_failed", question_len=len(question))
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.post("/ask", response_model=AskResponse)
+    def ask(body: AskRequest) -> AskResponse:
+        """Retrieve (OpenSearch + rerank) then generate an answer with citations."""
+        question = body.question.strip()
+        if not question:
+            raise HTTPException(status_code=400, detail="Question must not be empty")
+
+        container = get_container()
+        settings = container.settings
+        top_k = body.top_k or settings.generation_rerank_top_k
+
+        filters = None
+        if body.filters and not _filters_empty(body.filters):
+            filters = SearchFilters.model_validate(body.filters.model_dump())
+
+        try:
+            chunks = container.retrieval_service.search(
+                question,
+                top_k=top_k,
+                filters=filters,
+            )
+            generation = container.generation_service.generate(
+                GenerationRequest(question=question, retrieved_chunks=chunks)
+            )
+        except GenerationError as exc:
+            logger.exception("ask_generation_failed", question_len=len(question))
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.exception("ask_failed", question_len=len(question))
+            raise HTTPException(status_code=503, detail=f"Ask failed: {exc}") from exc
+
+        return AskResponse(
+            query=question,
+            answer=generation.answer,
+            sources=[source.model_dump() for source in generation.sources],
+            model_id=generation.model_id,
+            latency_ms=generation.latency_ms,
+            retrieval_count=len(chunks),
+        )
 
     return app
 

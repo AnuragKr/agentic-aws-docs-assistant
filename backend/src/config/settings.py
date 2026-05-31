@@ -64,13 +64,26 @@ class Settings(BaseSettings):
     opensearch_timeout: int = Field(default=60, alias="OPENSEARCH_TIMEOUT")
     opensearch_bulk_batch_size: int = Field(default=50, alias="OPENSEARCH_BULK_BATCH_SIZE")
 
-    search_vector_k: int = Field(default=25, alias="SEARCH_VECTOR_K")
-    search_rerank_candidates: int = Field(default=10, alias="SEARCH_RERANK_CANDIDATES")
+    search_vector_k: int = Field(default=20, alias="SEARCH_VECTOR_K")
+    search_rerank_candidates: int = Field(default=5, alias="SEARCH_RERANK_CANDIDATES")
     reranker_model_id: str = Field(default="BAAI/bge-reranker-base", alias="RERANKER_MODEL_ID")
     reranker_enabled: bool = Field(default=True, alias="RERANKER_ENABLED")
     warmup_models_on_startup: bool = Field(default=True, alias="WARMUP_MODELS_ON_STARTUP")
     search_timeout: int = Field(default=30, alias="SEARCH_TIMEOUT")
     health_opensearch_timeout: int = Field(default=5, alias="HEALTH_OPENSEARCH_TIMEOUT")
+
+    bedrock_region: str = Field(default="ap-south-1", alias="BEDROCK_REGION")
+    bedrock_model_id: str = Field(
+        default="meta.llama3-8b-instruct-v1:0",
+        alias="BEDROCK_MODEL_ID",
+    )
+    generation_max_tokens: int = Field(default=1024, alias="GENERATION_MAX_TOKENS")
+    generation_temperature: float = Field(default=0.1, alias="GENERATION_TEMPERATURE")
+    generation_top_p: float = Field(default=0.9, alias="GENERATION_TOP_P")
+    generation_timeout_seconds: int = Field(default=60, alias="GENERATION_TIMEOUT_SECONDS")
+    generation_max_retries: int = Field(default=3, alias="GENERATION_MAX_RETRIES")
+    generation_context_max_tokens: int = Field(default=4500, alias="GENERATION_CONTEXT_MAX_TOKENS")
+    generation_rerank_top_k: int = Field(default=5, alias="GENERATION_RERANK_TOP_K")
 
     cors_origins: str = Field(
         default="http://localhost:8501,http://127.0.0.1:8501",

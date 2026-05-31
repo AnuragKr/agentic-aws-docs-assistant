@@ -166,8 +166,11 @@ class RetrievedChunk(BaseModel):
     service: str | None = None
     service_category: str | None = None
     title: str = ""
+    document_title: str = ""
+    source_file: str = ""
     section: str | None = None
     subsection: str | None = None
+    page_number: int | None = None
     source_url: str = ""
     chunk_summary: str = ""
     keywords: list[str] = Field(default_factory=list)

@@ -15,6 +15,9 @@ from ingestion.parsers.factory import ParserFactory
 from ingestion.pipeline import DocumentIngestionPipeline
 from ingestion.preprocessors.pipeline import DocumentPreprocessor
 from ingestion.writers.s3_writer import S3ProcessedDocumentWriter
+from generation.prompt_builder import PromptBuilder
+from generation.providers.bedrock import BedrockGenerationProvider
+from generation.service import GenerationService
 from retrieval.reranker import get_reranker
 from retrieval.service import RetrievalService
 
@@ -77,6 +80,22 @@ class IngestionContainer:
             embeddings=self.embedding_provider,
             store=self.opensearch_store,
             reranker=get_reranker(self.settings),
+            settings=self.settings,
+        )
+
+    @cached_property
+    def prompt_builder(self) -> PromptBuilder:
+        return PromptBuilder(context_max_tokens=self.settings.generation_context_max_tokens)
+
+    @cached_property
+    def generation_provider(self) -> BedrockGenerationProvider:
+        return BedrockGenerationProvider(self.settings)
+
+    @cached_property
+    def generation_service(self) -> GenerationService:
+        return GenerationService(
+            provider=self.generation_provider,
+            prompt_builder=self.prompt_builder,
             settings=self.settings,
         )
 

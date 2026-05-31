@@ -72,9 +72,13 @@ resource "aws_iam_role_policy" "ec2_policy" {
         ]
       },
       {
-        Effect   = "Allow"
-        Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
-        Resource = "*"
+        "Effect" : "Allow",
+        "Action" : [
+          "bedrock:ListFoundationModels",
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream"
+        ],
+        "Resource" : "*"
       },
       {
         Effect = "Allow"
