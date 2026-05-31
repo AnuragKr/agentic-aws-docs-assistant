@@ -1,5 +1,6 @@
 aws_region   = "ap-south-1"
-project_name = "aws-docs-assistant"
+# Keep stable after first apply — changing project_name forces destroy/recreate of all resources
+project_name = "agentic-aws-docs"
 environment  = "dev"
 
 key_pair_name       = "your-keypair"

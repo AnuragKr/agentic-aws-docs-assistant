@@ -63,7 +63,10 @@ resource "aws_iam_role_policy" "ec2_policy" {
           "dynamodb:DeleteItem",
           "dynamodb:Query",
         ]
-        Resource = aws_dynamodb_table.chat_memory.arn
+        Resource = [
+          aws_dynamodb_table.chat_memory.arn,
+          aws_dynamodb_table.document_registry.arn,
+        ]
       },
       {
         Effect   = "Allow"

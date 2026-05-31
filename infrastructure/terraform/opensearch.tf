@@ -1,5 +1,5 @@
 resource "aws_opensearch_domain" "vector_store" {
-  domain_name    = "${local.name_prefix}-vector"
+  domain_name    = local.opensearch_domain_name
   engine_version = "OpenSearch_2.11"
 
   cluster_config {
@@ -32,7 +32,7 @@ resource "aws_opensearch_domain" "vector_store" {
         AWS = aws_iam_role.ec2_role.arn
       }
       Action   = "es:*"
-      Resource = "arn:aws:es:${var.aws_region}:${data.aws_caller_identity.current.account_id}:domain/${local.name_prefix}-vector/*"
+      Resource = "arn:aws:es:${var.aws_region}:${data.aws_caller_identity.current.account_id}:domain/${local.opensearch_domain_name}/*"
     }]
   })
 

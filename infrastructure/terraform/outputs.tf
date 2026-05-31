@@ -22,3 +22,7 @@ output "opensearch_endpoint" {
 output "dynamodb_table" {
   value = aws_dynamodb_table.chat_memory.name
 }
+
+output "document_registry_table" {
+  value = aws_dynamodb_table.document_registry.name
+}
