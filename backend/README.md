@@ -35,9 +35,17 @@ ingestion/
 
 ```bash
 cd backend && uv sync
+./scripts/fix_opencv.sh   # EC2/Docker: drop opencv-python (libGL), keep headless
 uv run uvicorn main:app --host 127.0.0.1 --port 8000
 
 # Simple CLI
 python run_ingestion.py
 python run_ingestion.py --max-documents 3
+```
+
+On **EC2** (no GUI libs), if you see `libGL.so.1` errors:
+
+```bash
+uv pip uninstall opencv-python
+# opencv-python-headless is already in pyproject.toml
 ```

@@ -1,14 +1,22 @@
 from abc import ABC, abstractmethod
 from threading import Lock
 
+from domain.models import ChunkRecord, DocumentMetadata
+
 
 class EmbeddingProvider(ABC):
     @abstractmethod
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+    def embed_documents(
+        self,
+        chunks: list[ChunkRecord],
+        metadata: DocumentMetadata,
+    ) -> list[list[float]]:
+        """Batch-embed all chunks for a document (not per-chunk embed_query)."""
         ...
 
     @abstractmethod
     def embed_query(self, text: str) -> list[float]:
+        """Embed a single search query at retrieval time."""
         ...
 
     @property

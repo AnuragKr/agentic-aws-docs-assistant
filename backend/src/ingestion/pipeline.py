@@ -1,5 +1,6 @@
 import time
-from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 
 from config.logging import get_logger, utc_now_iso
 from config.utils import document_id_from_key
@@ -8,7 +9,7 @@ from infrastructure.aws.dynamodb_registry import DynamoDBProcessingRegistry
 from infrastructure.opensearch.indexer import OpenSearchIndexer
 from ingestion.chunkers.hierarchical import HierarchicalChunker
 from ingestion.embeddings.provider import EmbeddingProvider
-from ingestion.enrichers.chunks import ChunkEnricher, build_embedding_text
+from ingestion.enrichers.chunks import ChunkEnricher
 from ingestion.enrichers.document import DocumentEnricher
 from ingestion.enrichers.metadata import MetadataExtractor
 from ingestion.loaders.s3_loader import S3DocumentLoader
@@ -20,12 +21,21 @@ from ingestion.writers.s3_writer import S3ProcessedDocumentWriter
 logger = get_logger(__name__)
 
 
+@dataclass
+class _DocumentResult:
+    written: int = 0
+    embedded: int = 0
+    error: str | None = None
+
+
 class DocumentIngestionPipeline:
     """
     Single orchestration class — read this file to understand ingestion:
 
         Load → Preprocess → Extract Metadata → Document Summary → Chunk
         → Enrich → Embed → Store → Update Registry
+
+    Documents are processed in parallel (ThreadPoolExecutor).
     """
 
     def __init__(
@@ -41,6 +51,7 @@ class DocumentIngestionPipeline:
         writer: S3ProcessedDocumentWriter,
         indexer: OpenSearchIndexer,
         registry: DynamoDBProcessingRegistry,
+        max_workers: int = 4,
     ) -> None:
         self._loader = loader
         self._parser = parser_factory
@@ -53,14 +64,12 @@ class DocumentIngestionPipeline:
         self._writer = writer
         self._indexer = indexer
         self._registry = registry
+        self._max_workers = max_workers
 
     def run(self, run: IngestionRun) -> None:
         run_started = time.perf_counter()
 
-        def tick(phase: str) -> None:
-            run.phase = phase
-
-        tick("scanning")
+        run.phase = "scanning"
         sources = list(self._loader.list_documents())
         if run.max_documents:
             sources = sources[: run.max_documents]
@@ -70,33 +79,48 @@ class DocumentIngestionPipeline:
 
         self._indexer.ensure_index(self._embeddings.dimension)
 
+        pending: list[SourceObject] = []
         for source in sources:
             if not run.force_reprocess and self._registry.is_unchanged(source):
                 run.documents_skipped += 1
                 logger.info("document_skipped", key=source.key, reason="unchanged")
                 continue
+            pending.append(source)
 
-            try:
-                written, embedded = self._process_document(source, tick)
-                run.documents_processed += 1
-                run.chunks_written += written
-                run.embeddings_generated += embedded
-            except Exception as exc:
-                run.documents_failed += 1
-                run.errors.append(f"{source.key}: {exc}")
-                logger.exception("document_failed", key=source.key)
-                self._registry.upsert(
-                    DocumentRegistryEntry(
-                        document_id=document_id_from_key(source.key),
-                        source_key=source.key,
-                        etag=source.etag,
-                        last_modified=source.last_modified.isoformat(),
-                        status=RegistryStatus.FAILED,
-                        error_message=str(exc),
-                    )
-                )
+        if pending:
+            run.phase = "processing"
+            logger.info("document_parallel_start", count=len(pending), workers=self._max_workers)
+            with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+                futures = {
+                    executor.submit(self._process_document_safe, source): source for source in pending
+                }
+                for future in as_completed(futures):
+                    source = futures[future]
+                    try:
+                        result = future.result()
+                    except Exception as exc:
+                        result = _DocumentResult(error=str(exc))
+                        logger.exception("document_failed", key=source.key)
 
-        tick("completed")
+                    if result.error:
+                        run.documents_failed += 1
+                        run.errors.append(f"{source.key}: {result.error}")
+                        self._registry.upsert(
+                            DocumentRegistryEntry(
+                                document_id=document_id_from_key(source.key),
+                                source_key=source.key,
+                                etag=source.etag,
+                                last_modified=source.last_modified.isoformat(),
+                                status=RegistryStatus.FAILED,
+                                error_message=result.error,
+                            )
+                        )
+                    else:
+                        run.documents_processed += 1
+                        run.chunks_written += result.written
+                        run.embeddings_generated += result.embedded
+
+        run.phase = "completed"
         logger.info(
             "pipeline_metrics",
             documents_processed=run.documents_processed,
@@ -105,32 +129,32 @@ class DocumentIngestionPipeline:
             chunks_created=run.chunks_written,
             embeddings_generated=run.embeddings_generated,
             processing_duration_ms=round((time.perf_counter() - run_started) * 1000, 2),
+            max_workers=self._max_workers,
         )
 
-    def _process_document(
-        self,
-        source: SourceObject,
-        tick: Callable[[str], None],
-    ) -> tuple[int, int]:
+    def _process_document_safe(self, source: SourceObject) -> _DocumentResult:
+        try:
+            written, embedded = self._process_document(source)
+            return _DocumentResult(written=written, embedded=embedded)
+        except Exception as exc:
+            return _DocumentResult(error=str(exc))
+
+    def _process_document(self, source: SourceObject) -> tuple[int, int]:
         key = source.key
         doc_started = time.perf_counter()
 
-        tick("load")
         with log_stage("load", document_key=key, size=source.size):
             raw = self._loader.load(source)
 
-        tick("docling")
         with log_stage("docling", document_key=key):
             parsed = self._parser.parse(raw)
 
-        tick("preprocess")
         with log_stage("preprocess", document_key=key):
             document = self._preprocessor.process(parsed)
             if not document.text.strip():
                 log_gap("preprocess", document_key=key, reason="empty_document")
                 return 0, 0
 
-        tick("extract_metadata")
         with log_stage("extract_metadata", document_key=key):
             metadata = self._metadata.extract(document)
 
@@ -144,25 +168,20 @@ class DocumentIngestionPipeline:
             )
         )
 
-        tick("document_summary")
         with log_stage("document_summary", document_key=key):
             metadata.document_summary = self._document_enricher.summarize(document, metadata)
 
-        tick("chunk")
         with log_stage("chunk", document_key=key):
             chunks = self._chunker.chunk(document, metadata)
             if not chunks:
                 log_gap("chunk", document_key=key, reason="zero_chunks")
                 return 0, 0
 
-        tick("enrich")
         with log_stage("enrich", document_key=key, chunk_count=len(chunks)):
             chunks = self._enricher.enrich(chunks, metadata)
 
-        tick("embed")
         with log_stage("embed", document_key=key, chunk_count=len(chunks)):
-            embed_texts = [build_embedding_text(c, metadata) for c in chunks]
-            vectors = self._embeddings.embed_documents(embed_texts)
+            vectors = self._embeddings.embed_documents(chunks, metadata)
             if len(vectors) != len(chunks):
                 log_gap(
                     "embed",
@@ -175,7 +194,6 @@ class DocumentIngestionPipeline:
             for chunk, vector in zip(chunks, vectors, strict=True):
                 chunk.embedding = vector
 
-        tick("store")
         with log_stage("store", document_key=key, chunk_count=len(chunks)):
             written = self._writer.write(document, metadata, chunks)
             indexed = self._indexer.index(chunks, key)

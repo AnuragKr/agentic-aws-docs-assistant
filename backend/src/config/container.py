@@ -83,6 +83,7 @@ class IngestionContainer:
             writer=self.writer,
             indexer=self.indexer,
             registry=self.registry,
+            max_workers=self.settings.ingestion_max_workers,
         )
 
 

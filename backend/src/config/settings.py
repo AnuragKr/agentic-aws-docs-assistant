@@ -42,7 +42,9 @@ class Settings(BaseSettings):
         default="sentence-transformers/all-MiniLM-L6-v2",
         alias="EMBEDDING_MODEL_ID",
     )
+    embedding_dimension: int = Field(default=384, alias="EMBEDDING_DIMENSION")
     embedding_batch_size: int = Field(default=32, alias="EMBEDDING_BATCH_SIZE")
+    ingestion_max_workers: int = Field(default=4, alias="INGESTION_MAX_WORKERS")
 
     opensearch_host: str = Field(default="localhost", alias="OPENSEARCH_HOST")
     opensearch_port: int = Field(default=9200, alias="OPENSEARCH_PORT")

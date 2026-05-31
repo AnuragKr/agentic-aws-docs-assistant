@@ -16,7 +16,9 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir \
         torch --index-url https://download.pytorch.org/whl/cpu \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip uninstall -y opencv-python 2>/dev/null || true \
+    && pip install --no-cache-dir opencv-python-headless
 
 COPY src ./src
 COPY run_ingestion.py .
