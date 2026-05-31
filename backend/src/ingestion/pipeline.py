@@ -115,17 +115,14 @@ class DocumentIngestionPipeline:
         key = source.key
         doc_started = time.perf_counter()
 
-        # 1. Load document
         tick("load")
         with log_stage("load", document_key=key, size=source.size):
             raw = self._loader.load(source)
 
-        # 2. Docling parse (structure + hierarchy)
         tick("docling")
         with log_stage("docling", document_key=key):
             parsed = self._parser.parse(raw)
 
-        # 3. Preprocess
         tick("preprocess")
         with log_stage("preprocess", document_key=key):
             document = self._preprocessor.process(parsed)
@@ -133,7 +130,6 @@ class DocumentIngestionPipeline:
                 log_gap("preprocess", document_key=key, reason="empty_document")
                 return 0, 0
 
-        # 4. Extract metadata
         tick("extract_metadata")
         with log_stage("extract_metadata", document_key=key):
             metadata = self._metadata.extract(document)
@@ -148,12 +144,10 @@ class DocumentIngestionPipeline:
             )
         )
 
-        # 5. Document summary (before chunking)
         tick("document_summary")
         with log_stage("document_summary", document_key=key):
             metadata.document_summary = self._document_enricher.summarize(document, metadata)
 
-        # 6. Hierarchical chunking
         tick("chunk")
         with log_stage("chunk", document_key=key):
             chunks = self._chunker.chunk(document, metadata)
@@ -161,12 +155,10 @@ class DocumentIngestionPipeline:
                 log_gap("chunk", document_key=key, reason="zero_chunks")
                 return 0, 0
 
-        # 7. Chunk enrichment
         tick("enrich")
         with log_stage("enrich", document_key=key, chunk_count=len(chunks)):
             chunks = self._enricher.enrich(chunks, metadata)
 
-        # 8. Embedding generation (batched, with parent context)
         tick("embed")
         with log_stage("embed", document_key=key, chunk_count=len(chunks)):
             embed_texts = [build_embedding_text(c, metadata) for c in chunks]
@@ -183,13 +175,11 @@ class DocumentIngestionPipeline:
             for chunk, vector in zip(chunks, vectors, strict=True):
                 chunk.embedding = vector
 
-        # 9. Store results (S3 + OpenSearch)
         tick("store")
         with log_stage("store", document_key=key, chunk_count=len(chunks)):
             written = self._writer.write(document, metadata, chunks)
             indexed = self._indexer.index(chunks, key)
 
-        # 10. Update registry
         self._registry.upsert(
             DocumentRegistryEntry(
                 document_id=metadata.document_id,
