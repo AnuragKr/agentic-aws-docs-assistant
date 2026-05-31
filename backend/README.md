@@ -14,11 +14,8 @@ PDF → PyMuPDF → Text → Heading Extraction → Preprocess → Metadata
 | PDF parser | **PyMuPDF** (`fitz`) |
 | HTML / MD | BeautifulSoup + markdown heading extraction |
 | Hierarchy | Font-size heuristics (PDF) or `#` headings (MD/HTML) |
-| Chunking | Custom hierarchical chunker + tiktoken |
-| Fallback split | LangChain `RecursiveCharacterTextSplitter` (oversized sections only) |
-| Embeddings | Strategy + Factory + Singleton |
-
-LangChain is **not** tightly coupled — removing it only affects the fallback splitter.
+| Chunking | Sentence-boundary splitter + hierarchical chunker + tiktoken |
+| Embeddings | SentenceTransformers (singleton) + CrossEncoder reranker |
 
 ## Structure
 
@@ -36,8 +33,10 @@ ingestion/
 ## Run
 
 ```bash
-cd backend && uv sync
+cd backend && uv sync              # runtime + dev (pytest, ruff)
+uv sync --no-dev                   # production deps only
 uv run uvicorn main:app --host 127.0.0.1 --port 8000
+```
 
 # Simple CLI
 python run_ingestion.py

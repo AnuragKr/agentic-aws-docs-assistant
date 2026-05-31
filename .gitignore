@@ -57,3 +57,16 @@ frontend/.streamlit/secrets.toml
 .DS_Store
 tempCodeRunnerFile.py
 .pypirc
+
+# Local Docker overrides
+docker-compose.local.yml
+
+# Local environment files
+.env
+.env.local
+
+# AWS credentials
+.aws/
+
+# MacOS
+.DS_Store

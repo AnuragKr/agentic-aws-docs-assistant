@@ -1,27 +1,32 @@
-# Backend — FastAPI (search, RAG generation, ingestion CLI)
+# syntax=docker/dockerfile:1
+# Backend — FastAPI ingestion, search, RAG generation (CPU-only ML stack).
 # EC2: uses instance profile via IMDS — do not bake AWS keys into the image.
-FROM python:3.11-slim
+
+FROM python:3.11-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONPATH=/app/src \
     HF_HOME=/app/.cache/huggingface \
     TRANSFORMERS_CACHE=/app/.cache/huggingface \
-    SENTENCE_TRANSFORMERS_HOME=/app/.cache/huggingface
+    SENTENCE_TRANSFORMERS_HOME=/app/.cache/huggingface \
+    TOKENIZERS_PARALLELISM=false
 
 WORKDIR /app
 
+# libgomp1: PyTorch CPU; curl: healthcheck
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
-COPY requirements.txt .
+# CPU-only PyTorch via extra index; single pip resolve (no duplicate torch).
+COPY requirements.txt ./
 RUN pip install --no-cache-dir \
-        torch --index-url https://download.pytorch.org/whl/cpu \
-    && pip install --no-cache-dir -r requirements.txt \
-    && pip uninstall -y opencv-python 2>/dev/null || true \
-    && pip install --no-cache-dir opencv-python-headless
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    -r requirements.txt \
+    && pip check
 
 COPY src ./src
 COPY run_ingestion.py .
@@ -32,12 +37,10 @@ RUN useradd --create-home --uid 10001 appuser \
     && chown -R appuser:appuser /app
 
 WORKDIR /app/src
-
 USER appuser
 
 EXPOSE 8000
 
-# First start downloads reranker (~1.1GB) — allow long warmup before marking healthy.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=5 \
     CMD curl -fsS http://127.0.0.1:8000/health || exit 1
 

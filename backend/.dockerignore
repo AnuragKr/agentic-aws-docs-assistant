@@ -11,6 +11,8 @@ venv/
 !.env.example
 tests/
 README.md
-pyproject.toml
+docs/
 uv.lock
 .git/
+*.md
+!requirements*.txt
