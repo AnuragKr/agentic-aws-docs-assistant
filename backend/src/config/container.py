@@ -1,12 +1,9 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from functools import cached_property
 
 from config.settings import Settings, get_settings
-from domain.models import IngestionJob, JobStatus
 from infrastructure.aws.dynamodb_registry import DynamoDBProcessingRegistry
 from infrastructure.opensearch.indexer import OpenSearchIndexer, create_opensearch_client
-from infrastructure.storage.file_job_store import FileJobStore
 from ingestion.chunkers.hierarchical import HierarchicalChunker
 from ingestion.embeddings.factory import get_embedding_provider
 from ingestion.enrichers.chunks import ChunkEnricher
@@ -22,10 +19,6 @@ from ingestion.writers.s3_writer import S3ProcessedDocumentWriter
 @dataclass
 class IngestionContainer:
     settings: Settings = field(default_factory=get_settings)
-
-    @cached_property
-    def job_store(self) -> FileJobStore:
-        return FileJobStore(self.settings.job_store_path())
 
     @cached_property
     def loader(self) -> S3DocumentLoader:
@@ -101,30 +94,3 @@ def get_container() -> IngestionContainer:
     if _container is None:
         _container = IngestionContainer()
     return _container
-
-
-class IngestionService:
-    def __init__(self, container: IngestionContainer) -> None:
-        self._container = container
-
-    def run_job(self, job_id: str) -> None:
-        job = self._container.job_store.get(job_id)
-        if job is None:
-            raise ValueError(f"Job {job_id} not found")
-
-        job.status = JobStatus.RUNNING
-        self._container.job_store.save(job)
-
-        def on_progress(updated: IngestionJob) -> None:
-            self._container.job_store.save(updated)
-
-        try:
-            self._container.pipeline.run(job, on_progress=on_progress)
-            job.status = JobStatus.COMPLETED
-        except Exception as exc:
-            job.status = JobStatus.FAILED
-            job.phase = "failed"
-            job.errors.append(str(exc))
-        finally:
-            job.finished_at = datetime.now(timezone.utc)
-            self._container.job_store.save(job)

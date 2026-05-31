@@ -36,5 +36,7 @@ ingestion/
 ```bash
 cd backend && uv sync
 uv run uvicorn main:app --host 127.0.0.1 --port 8000
-uv run python -m ingestion.runner --job-id <uuid>
+
+# Simple CLI
+python run_ingestion.py --prefix lambda/
 ```

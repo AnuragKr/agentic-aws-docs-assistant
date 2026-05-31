@@ -19,9 +19,10 @@ RUN pip install --no-cache-dir \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY src ./src
+COPY run_ingestion.py .
 
 RUN useradd --create-home --uid 10001 appuser \
-    && mkdir -p /app/.cache/huggingface /app/.ingestion_jobs \
+    && mkdir -p /app/.cache/huggingface \
     && chown -R appuser:appuser /app
 USER appuser
 

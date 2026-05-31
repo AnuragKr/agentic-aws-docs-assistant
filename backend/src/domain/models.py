@@ -1,15 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
-from uuid import uuid4
 
 from pydantic import BaseModel, Field
-
-
-class JobStatus(StrEnum):
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
 
 
 class RegistryStatus(StrEnum):
@@ -18,6 +10,21 @@ class RegistryStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     SKIPPED = "skipped"
+
+
+class IngestionRun(BaseModel):
+    """Options and metrics for a single ingestion run (CLI or API)."""
+
+    prefix: str | None = None
+    max_documents: int | None = None
+    force_reprocess: bool = False
+    phase: str | None = None
+    documents_processed: int = 0
+    documents_skipped: int = 0
+    documents_failed: int = 0
+    chunks_written: int = 0
+    embeddings_generated: int = 0
+    errors: list[str] = Field(default_factory=list)
 
 
 class SourceObject(BaseModel):
@@ -110,23 +117,6 @@ class DocumentRegistryEntry(BaseModel):
     status: RegistryStatus
     processed_at: str | None = None
     error_message: str | None = None
-
-
-class IngestionJob(BaseModel):
-    job_id: str = Field(default_factory=lambda: str(uuid4()))
-    status: JobStatus = JobStatus.PENDING
-    phase: str | None = None
-    documents_processed: int = 0
-    documents_skipped: int = 0
-    documents_failed: int = 0
-    chunks_written: int = 0
-    embeddings_generated: int = 0
-    errors: list[str] = Field(default_factory=list)
-    prefix: str | None = None
-    max_documents: int | None = None
-    force_reprocess: bool = False
-    started_at: datetime = Field(default_factory=datetime.utcnow)
-    finished_at: datetime | None = None
 
 
 # Interview-friendly aliases

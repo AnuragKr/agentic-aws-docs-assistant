@@ -3,7 +3,7 @@ from collections.abc import Callable
 
 from config.logging import get_logger, utc_now_iso
 from config.utils import document_id_from_key
-from domain.models import DocumentRegistryEntry, IngestionJob, RegistryStatus, SourceObject
+from domain.models import DocumentRegistryEntry, IngestionRun, RegistryStatus, SourceObject
 from infrastructure.aws.dynamodb_registry import DynamoDBProcessingRegistry
 from infrastructure.opensearch.indexer import OpenSearchIndexer
 from ingestion.chunkers.hierarchical import HierarchicalChunker
@@ -54,43 +54,36 @@ class DocumentIngestionPipeline:
         self._indexer = indexer
         self._registry = registry
 
-    def run(
-        self,
-        job: IngestionJob,
-        *,
-        on_progress: Callable[[IngestionJob], None] | None = None,
-    ) -> None:
+    def run(self, run: IngestionRun) -> None:
         run_started = time.perf_counter()
 
         def tick(phase: str) -> None:
-            job.phase = phase
-            if on_progress:
-                on_progress(job)
+            run.phase = phase
 
         tick("scanning")
-        sources = list(self._loader.list_documents(job.prefix))
-        if job.max_documents:
-            sources = sources[: job.max_documents]
+        sources = list(self._loader.list_documents(run.prefix))
+        if run.max_documents:
+            sources = sources[: run.max_documents]
 
         if not sources:
-            log_gap("load", document_key=job.prefix or "", reason="no_documents_found")
+            log_gap("load", document_key=run.prefix or "", reason="no_documents_found")
 
         self._indexer.ensure_index(self._embeddings.dimension)
 
         for source in sources:
-            if not job.force_reprocess and self._registry.is_unchanged(source):
-                job.documents_skipped += 1
+            if not run.force_reprocess and self._registry.is_unchanged(source):
+                run.documents_skipped += 1
                 logger.info("document_skipped", key=source.key, reason="unchanged")
                 continue
 
             try:
                 written, embedded = self._process_document(source, tick)
-                job.documents_processed += 1
-                job.chunks_written += written
-                job.embeddings_generated += embedded
+                run.documents_processed += 1
+                run.chunks_written += written
+                run.embeddings_generated += embedded
             except Exception as exc:
-                job.documents_failed += 1
-                job.errors.append(f"{source.key}: {exc}")
+                run.documents_failed += 1
+                run.errors.append(f"{source.key}: {exc}")
                 logger.exception("document_failed", key=source.key)
                 self._registry.upsert(
                     DocumentRegistryEntry(
@@ -106,12 +99,11 @@ class DocumentIngestionPipeline:
         tick("completed")
         logger.info(
             "pipeline_metrics",
-            job_id=job.job_id,
-            documents_processed=job.documents_processed,
-            documents_skipped=job.documents_skipped,
-            failed_documents=job.documents_failed,
-            chunks_created=job.chunks_written,
-            embeddings_generated=job.embeddings_generated,
+            documents_processed=run.documents_processed,
+            documents_skipped=run.documents_skipped,
+            failed_documents=run.documents_failed,
+            chunks_created=run.chunks_written,
+            embeddings_generated=run.embeddings_generated,
             processing_duration_ms=round((time.perf_counter() - run_started) * 1000, 2),
         )
 

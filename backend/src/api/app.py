@@ -1,15 +1,13 @@
 from contextlib import asynccontextmanager
-from typing import Annotated
 
-from fastapi import Depends, FastAPI, Query
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from config.container import get_container
-from config.logging import NotFoundError, setup_logging
+from config.logging import setup_logging
 from config.settings import get_settings
-from domain.models import JobStatus
-from ingestion.runner.launcher import IngestionLauncher
+from domain.models import IngestionRun
 
 
 class IngestionRunRequest(BaseModel):
@@ -18,14 +16,7 @@ class IngestionRunRequest(BaseModel):
     force_reprocess: bool = False
 
 
-class IngestionJobResponse(BaseModel):
-    job_id: str
-    status: JobStatus
-
-
-class IngestionStatusResponse(BaseModel):
-    job_id: str
-    status: JobStatus
+class IngestionRunResponse(BaseModel):
     phase: str | None
     documents_processed: int
     documents_skipped: int
@@ -33,13 +24,6 @@ class IngestionStatusResponse(BaseModel):
     chunks_written: int
     embeddings_generated: int
     errors: list[str]
-
-
-def get_launcher() -> IngestionLauncher:
-    return IngestionLauncher()
-
-
-LauncherDep = Annotated[IngestionLauncher, Depends(get_launcher)]
 
 
 @asynccontextmanager
@@ -65,40 +49,23 @@ def create_app() -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok", "service": settings.app_name}
 
-    @app.post("/ingestion/run", response_model=IngestionJobResponse)
-    def run_ingestion(body: IngestionRunRequest, launcher: LauncherDep) -> IngestionJobResponse:
-        job = launcher.start(
+    @app.post("/ingestion/run", response_model=IngestionRunResponse)
+    def run_ingestion(body: IngestionRunRequest) -> IngestionRunResponse:
+        run = IngestionRun(
             prefix=body.prefix,
             max_documents=body.max_documents,
             force_reprocess=body.force_reprocess,
         )
-        return IngestionJobResponse(job_id=job.job_id, status=job.status)
-
-    @app.get("/ingestion/status", response_model=IngestionStatusResponse)
-    def ingestion_status(
-        launcher: LauncherDep,
-        job_id: str = Query(...),
-    ) -> IngestionStatusResponse:
-        job = launcher.get_status(job_id)
-        if job is None:
-            raise NotFoundError(f"Job {job_id} not found")
-        return IngestionStatusResponse(
-            job_id=job.job_id,
-            status=job.status,
-            phase=job.phase,
-            documents_processed=job.documents_processed,
-            documents_skipped=job.documents_skipped,
-            documents_failed=job.documents_failed,
-            chunks_written=job.chunks_written,
-            embeddings_generated=job.embeddings_generated,
-            errors=job.errors,
+        get_container().pipeline.run(run)
+        return IngestionRunResponse(
+            phase=run.phase,
+            documents_processed=run.documents_processed,
+            documents_skipped=run.documents_skipped,
+            documents_failed=run.documents_failed,
+            chunks_written=run.chunks_written,
+            embeddings_generated=run.embeddings_generated,
+            errors=run.errors,
         )
-
-    @app.exception_handler(NotFoundError)
-    async def not_found_handler(_, exc: NotFoundError):
-        from fastapi.responses import JSONResponse
-
-        return JSONResponse(status_code=404, content={"detail": str(exc)})
 
     return app
 

@@ -28,7 +28,6 @@ class Settings(BaseSettings):
         default="document-registry",
         alias="DYNAMODB_REGISTRY_TABLE",
     )
-    job_store_dir: str = Field(default=".ingestion_jobs", alias="JOB_STORE_DIR")
 
     docs_base_url: str = Field(
         default="https://docs.aws.amazon.com",
@@ -65,12 +64,6 @@ class Settings(BaseSettings):
 
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
-
-    def job_store_path(self) -> Path:
-        path = Path(self.job_store_dir)
-        if not path.is_absolute():
-            path = _BACKEND_ROOT / path
-        return path
 
 
 @lru_cache
