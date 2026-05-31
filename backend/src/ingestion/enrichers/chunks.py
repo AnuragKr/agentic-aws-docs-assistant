@@ -8,7 +8,7 @@ logger = get_logger(__name__)
 def build_embedding_text(chunk: ChunkRecord, metadata: DocumentMetadata) -> str:
     """Prepend parent context before embedding for better retrieval."""
     path = chunk.hierarchy_path or [p for p in [chunk.section, chunk.subsection] if p]
-    context = [p for p in [metadata.title, *path] if p]
+    context = [p for p in [metadata.document_title or metadata.title, *path] if p]
     if metadata.services:
         context.append(", ".join(metadata.services[:5]))
     if not context:
@@ -27,6 +27,7 @@ class ChunkEnricher:
             chunk.total_chunks = total
             chunk.document_id = metadata.document_id
             chunk.title = metadata.title
+            chunk.document_title = metadata.document_title or metadata.title
             chunk.service = metadata.service
             chunk.service_category = metadata.service_category
             chunk.services = list(metadata.services)

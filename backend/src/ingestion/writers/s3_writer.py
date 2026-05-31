@@ -3,6 +3,7 @@ import boto3
 from config.logging import ConfigurationError, get_logger, to_json, utc_now_iso
 from config.utils import with_retry
 from domain.models import ChunkRecord, DocumentMetadata, PreprocessedDocument
+from infrastructure.aws.session import get_s3_client
 
 logger = get_logger(__name__)
 
@@ -18,7 +19,7 @@ class S3ProcessedDocumentWriter:
     def __init__(self, bucket: str, region: str, prefix: str = "processed/") -> None:
         if not bucket:
             raise ConfigurationError("S3_PROCESSED_BUCKET is not configured")
-        self._client = boto3.client("s3", region_name=region)
+        self._client = get_s3_client(region)
         self._bucket = bucket
         self._prefix = prefix.rstrip("/") + "/"
 

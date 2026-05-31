@@ -37,10 +37,13 @@ class Settings(BaseSettings):
         alias="DOCS_BASE_URL",
     )
 
-    # 800–1200 token target, 10–20% overlap (tiktoken)
-    chunk_min_tokens: int = Field(default=800, alias="CHUNK_MIN_TOKENS")
+    # Sentence-aware chunks: 500–1200 tokens, 800 target, 100 overlap (tiktoken)
+    chunk_min_tokens: int = Field(default=500, alias="CHUNK_MIN_TOKENS")
     chunk_max_tokens: int = Field(default=1200, alias="CHUNK_MAX_TOKENS")
-    chunk_overlap_tokens: int = Field(default=150, alias="CHUNK_OVERLAP_TOKENS")
+    chunk_target_tokens: int = Field(default=800, alias="CHUNK_TARGET_TOKENS")
+    chunk_overlap_tokens: int = Field(default=100, alias="CHUNK_OVERLAP_TOKENS")
+    chunk_max_split_depth: int = Field(default=3, alias="CHUNK_MAX_SPLIT_DEPTH")
+    chunk_max_chunks_per_document: int = Field(default=500, alias="CHUNK_MAX_CHUNKS_PER_DOCUMENT")
 
     embedding_provider: str = Field(default="huggingface", alias="EMBEDDING_PROVIDER")
     embedding_model_id: str = Field(
@@ -60,6 +63,14 @@ class Settings(BaseSettings):
     opensearch_use_ssl: bool = Field(default=False, alias="OPENSEARCH_USE_SSL")
     opensearch_timeout: int = Field(default=60, alias="OPENSEARCH_TIMEOUT")
     opensearch_bulk_batch_size: int = Field(default=50, alias="OPENSEARCH_BULK_BATCH_SIZE")
+
+    search_vector_k: int = Field(default=25, alias="SEARCH_VECTOR_K")
+    search_rerank_candidates: int = Field(default=10, alias="SEARCH_RERANK_CANDIDATES")
+    reranker_model_id: str = Field(default="BAAI/bge-reranker-base", alias="RERANKER_MODEL_ID")
+    reranker_enabled: bool = Field(default=True, alias="RERANKER_ENABLED")
+    warmup_models_on_startup: bool = Field(default=True, alias="WARMUP_MODELS_ON_STARTUP")
+    search_timeout: int = Field(default=30, alias="SEARCH_TIMEOUT")
+    health_opensearch_timeout: int = Field(default=5, alias="HEALTH_OPENSEARCH_TIMEOUT")
 
     cors_origins: str = Field(
         default="http://localhost:8501,http://127.0.0.1:8501",

@@ -19,7 +19,7 @@ def test_metadata_extraction() -> None:
     assert meta.document_id
     assert meta.service == "Lambda"
     assert meta.source_file == "concurrency.md"
-    assert "IAM" in meta.services
+    assert "AWS IAM" in meta.services
     assert meta.source_url.endswith(doc.key)
 
 

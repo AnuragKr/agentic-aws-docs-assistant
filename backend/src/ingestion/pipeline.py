@@ -1,13 +1,16 @@
+import hashlib
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 
 from config.logging import get_logger, utc_now_iso
 from config.utils import document_id_from_key
+from domain.exceptions import ChunkExplosionError
 from domain.models import DocumentRegistryEntry, IngestionRun, RegistryStatus, SourceObject
 from infrastructure.aws.dynamodb_registry import DynamoDBProcessingRegistry
 from infrastructure.opensearch.indexer import OpenSearchIndexer
 from ingestion.chunkers.hierarchical import HierarchicalChunker
+from ingestion.chunkers.metrics import log_chunk_metrics, section_token_stats
 from ingestion.embeddings.provider import EmbeddingProvider
 from ingestion.enrichers.chunks import ChunkEnricher
 from ingestion.enrichers.document import DocumentEnricher
@@ -21,11 +24,17 @@ from ingestion.writers.s3_writer import S3ProcessedDocumentWriter
 logger = get_logger(__name__)
 
 
+def compute_document_hash(content: bytes | str) -> str:
+    data = content if isinstance(content, bytes) else content.encode("utf-8")
+    return hashlib.sha256(data).hexdigest()
+
+
 @dataclass
 class _DocumentResult:
     written: int = 0
     embedded: int = 0
     indexed: int = 0
+    skipped: bool = False
     error: str | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -86,7 +95,7 @@ class DocumentIngestionPipeline:
         for source in sources:
             if not run.force_reprocess and self._registry.is_unchanged(source):
                 run.documents_skipped += 1
-                logger.info("document_skipped", key=source.key, reason="unchanged")
+                logger.info("document_skipped", key=source.key, reason="unchanged_etag")
                 continue
             pending.append(source)
 
@@ -108,12 +117,16 @@ class DocumentIngestionPipeline:
                         total=total,
                         key=source.key,
                     )
-                    result = self._process_document_safe(source)
+                    result = self._process_document_safe(source, run.force_reprocess)
                     self._apply_result(run, source, result)
             else:
                 with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
                     futures = {
-                        executor.submit(self._process_document_safe, source): source
+                        executor.submit(
+                            self._process_document_safe,
+                            source,
+                            run.force_reprocess,
+                        ): source
                         for source in pending
                     }
                     for future in as_completed(futures):
@@ -147,16 +160,8 @@ class DocumentIngestionPipeline:
             run.documents_failed += 1
             run.errors.append(f"{source.key}: {result.error}")
             logger.error("document_failed", key=source.key, error=result.error)
-            self._registry.upsert(
-                DocumentRegistryEntry(
-                    document_id=document_id_from_key(source.key),
-                    source_key=source.key,
-                    etag=source.etag,
-                    last_modified=source.last_modified.isoformat(),
-                    status=RegistryStatus.FAILED,
-                    error_message=result.error,
-                )
-            )
+        elif result.skipped:
+            run.documents_skipped += 1
         else:
             run.documents_processed += 1
             run.chunks_written += result.written
@@ -164,20 +169,63 @@ class DocumentIngestionPipeline:
             for warning in result.warnings:
                 run.errors.append(f"{source.key}: {warning}")
 
-    def _process_document_safe(self, source: SourceObject) -> _DocumentResult:
+    def _process_document_safe(
+        self,
+        source: SourceObject,
+        force_reprocess: bool,
+    ) -> _DocumentResult:
         try:
-            return self._process_document(source)
+            return self._process_document(source, force_reprocess)
+        except ChunkExplosionError as exc:
+            logger.error(
+                "chunk_explosion_error",
+                key=source.key,
+                chunk_count=exc.chunk_count,
+                limit=exc.limit,
+            )
+            self._registry.upsert(
+                DocumentRegistryEntry(
+                    document_id=document_id_from_key(source.key),
+                    source_key=source.key,
+                    etag=source.etag,
+                    last_modified=source.last_modified.isoformat(),
+                    status=RegistryStatus.FAILED,
+                    error_message=str(exc),
+                    chunk_count=exc.chunk_count,
+                )
+            )
+            return _DocumentResult(error=str(exc))
         except Exception as exc:
             logger.exception("document_exception", key=source.key)
+            self._registry.upsert(
+                DocumentRegistryEntry(
+                    document_id=document_id_from_key(source.key),
+                    source_key=source.key,
+                    etag=source.etag,
+                    last_modified=source.last_modified.isoformat(),
+                    status=RegistryStatus.FAILED,
+                    error_message=str(exc),
+                )
+            )
             return _DocumentResult(error=str(exc))
 
-    def _process_document(self, source: SourceObject) -> _DocumentResult:
+    def _process_document(
+        self,
+        source: SourceObject,
+        force_reprocess: bool,
+    ) -> _DocumentResult:
         key = source.key
         doc_started = time.perf_counter()
         result = _DocumentResult()
 
         with log_stage("load", document_key=key, size=source.size):
             raw = self._loader.load(source)
+
+        document_hash = compute_document_hash(raw.content)
+        if not force_reprocess and self._registry.is_unchanged(source, document_hash):
+            logger.info("document_skipped", key=key, reason="unchanged_hash")
+            result.skipped = True
+            return result
 
         with log_stage("parse", document_key=key):
             parsed = self._parser.parse(raw)
@@ -198,11 +246,19 @@ class DocumentIngestionPipeline:
                 etag=source.etag,
                 last_modified=source.last_modified.isoformat(),
                 status=RegistryStatus.PROCESSING,
+                document_hash=document_hash,
             )
         )
 
         with log_stage("document_summary", document_key=key):
             metadata.document_summary = self._document_enricher.summarize(document, metadata)
+
+        section_stats = section_token_stats(document.sections, self._chunker._settings)
+        section_count = (
+            sum(1 for _ in HierarchicalChunker.iter_leaves(document.sections))
+            if document.sections
+            else 0
+        )
 
         with log_stage("chunk", document_key=key):
             chunks = self._chunker.chunk(document, metadata)
@@ -210,9 +266,18 @@ class DocumentIngestionPipeline:
                 log_gap("chunk", document_key=key, reason="zero_chunks")
                 return result
 
+        log_chunk_metrics(
+            source_key=key,
+            total_pages=document.total_pages,
+            section_count=section_count,
+            section_token_stats=section_stats,
+            chunks=chunks,
+        )
+
         with log_stage("enrich", document_key=key, chunk_count=len(chunks)):
             chunks = self._enricher.enrich(chunks, metadata)
 
+        embed_started = time.perf_counter()
         with log_stage("embed", document_key=key, chunk_count=len(chunks)):
             vectors = self._embeddings.embed_documents(chunks, metadata)
             if len(vectors) != len(chunks):
@@ -227,6 +292,14 @@ class DocumentIngestionPipeline:
             for chunk, vector in zip(chunks, vectors, strict=True):
                 chunk.embedding = vector
 
+        embedding_duration_ms = round((time.perf_counter() - embed_started) * 1000, 2)
+        logger.info(
+            "embedding_metrics",
+            source_key=key,
+            chunk_count=len(chunks),
+            embedding_duration_ms=embedding_duration_ms,
+        )
+
         with log_stage("store_s3", document_key=key, chunk_count=len(chunks)):
             result.written = self._writer.write(document, metadata, chunks)
 
@@ -237,12 +310,23 @@ class DocumentIngestionPipeline:
                 etag=source.etag,
                 last_modified=source.last_modified.isoformat(),
                 status=RegistryStatus.STORED,
+                document_hash=document_hash,
                 processed_at=utc_now_iso(),
+                chunk_count=len(chunks),
             )
         )
 
+        index_started = time.perf_counter()
         with log_stage("store_opensearch", document_key=key, chunk_count=len(chunks)):
             index_result = self._indexer.index(chunks, key)
+
+        indexing_duration_ms = round((time.perf_counter() - index_started) * 1000, 2)
+        logger.info(
+            "indexing_metrics",
+            source_key=key,
+            chunks_indexed=index_result.indexed,
+            indexing_duration_ms=indexing_duration_ms,
+        )
 
         result.indexed = index_result.indexed
         result.embedded = len(vectors)
@@ -259,7 +343,11 @@ class DocumentIngestionPipeline:
                 etag=source.etag,
                 last_modified=source.last_modified.isoformat(),
                 status=RegistryStatus.INDEXED,
+                document_hash=document_hash,
                 processed_at=utc_now_iso(),
+                indexed_at=utc_now_iso(),
+                chunk_count=len(chunks),
+                embedding_count=len(vectors),
                 error_message=index_error,
             )
         )
@@ -267,10 +355,14 @@ class DocumentIngestionPipeline:
         logger.info(
             "document_metrics",
             source_key=key,
+            pages=document.total_pages,
+            section_count=section_count,
             chunks_created=result.written,
             embeddings_generated=result.embedded,
             opensearch_indexed=result.indexed,
             opensearch_failed=index_result.failed,
+            embedding_duration_ms=embedding_duration_ms,
+            indexing_duration_ms=indexing_duration_ms,
             processing_duration_ms=round((time.perf_counter() - doc_started) * 1000, 2),
         )
         return result

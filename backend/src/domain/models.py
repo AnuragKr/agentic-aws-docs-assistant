@@ -56,6 +56,7 @@ class ParsedDocument(BaseModel):
     last_modified: datetime
     sections: list["SectionNode"] = Field(default_factory=list)
     total_pages: int = 0
+    document_title: str = ""
 
 
 class SectionNode(BaseModel):
@@ -64,6 +65,11 @@ class SectionNode(BaseModel):
     content: str = ""
     page_start: int | None = None
     page_end: int | None = None
+    chapter: str | None = None
+    section: str | None = None
+    subsection: str | None = None
+    best_practice_id: str | None = None
+    best_practice_title: str | None = None
     children: list["SectionNode"] = Field(default_factory=list)
 
 
@@ -75,6 +81,7 @@ class PreprocessedDocument(BaseModel):
     last_modified: datetime
     sections: list[SectionNode] = Field(default_factory=list)
     total_pages: int = 0
+    document_title: str = ""
 
 
 class DocumentMetadata(BaseModel):
@@ -82,6 +89,7 @@ class DocumentMetadata(BaseModel):
 
     document_id: str
     title: str
+    document_title: str = ""
     service: str | None = None
     service_category: str | None = None
     services: list[str] = Field(default_factory=list)
@@ -106,8 +114,12 @@ class ChunkRecord(BaseModel):
     service_category: str | None = None
     services: list[str] = Field(default_factory=list)
     title: str = ""
+    document_title: str = ""
+    chapter: str | None = None
     section: str | None = None
     subsection: str | None = None
+    best_practice_id: str | None = None
+    best_practice_title: str | None = None
     hierarchy_path: list[str] = Field(default_factory=list)
     source_url: str = ""
     source_file: str = ""
@@ -136,8 +148,31 @@ class DocumentRegistryEntry(BaseModel):
     etag: str
     last_modified: str
     status: RegistryStatus
+    document_hash: str | None = None
     processed_at: str | None = None
+    indexed_at: str | None = None
+    chunk_count: int = 0
+    embedding_count: int = 0
     error_message: str | None = None
+
+
+class RetrievedChunk(BaseModel):
+    """Search result returned to API clients."""
+
+    chunk_id: str
+    document_id: str
+    content: str
+    score: float
+    service: str | None = None
+    service_category: str | None = None
+    title: str = ""
+    section: str | None = None
+    subsection: str | None = None
+    source_url: str = ""
+    chunk_summary: str = ""
+    keywords: list[str] = Field(default_factory=list)
+    topics: list[str] = Field(default_factory=list)
+    citation: str = ""
 
 
 # Interview-friendly aliases

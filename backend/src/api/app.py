@@ -1,13 +1,17 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from config.container import get_container
-from config.logging import setup_logging
+from config.logging import get_logger, setup_logging
 from config.settings import get_settings
-from domain.models import IngestionRun
+from config.warmup import warmup_models
+from domain.models import IngestionRun, RetrievedChunk
+from retrieval.filters import SearchFilters
+
+logger = get_logger(__name__)
 
 
 class IngestionRunRequest(BaseModel):
@@ -25,11 +29,32 @@ class IngestionRunResponse(BaseModel):
     errors: list[str]
 
 
+class SearchFiltersRequest(BaseModel):
+    service: str | None = None
+    service_category: str | None = None
+    section: str | None = None
+    subsection: str | None = None
+    topics: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+
+
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=1)
+    top_k: int = Field(default=5, ge=1, le=20)
+    filters: SearchFiltersRequest | None = None
+
+
+class SearchResponse(BaseModel):
+    query: str
+    results: list[RetrievedChunk]
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings = get_settings()
     setup_logging(settings)
     get_container()
+    warmup_models()
     yield
 
 
@@ -45,8 +70,22 @@ def create_app() -> FastAPI:
     )
 
     @app.get("/health")
-    def health() -> dict[str, str]:
+    def health() -> dict:
+        """Fast liveness probe — no OpenSearch or ML model calls."""
         return {"status": "ok", "service": settings.app_name}
+
+    @app.get("/health/ready")
+    def health_ready() -> dict:
+        """Readiness probe — checks OpenSearch with a short timeout."""
+        container = get_container()
+        opensearch = container.opensearch_store.ping()
+        ready = opensearch.get("reachable") and opensearch.get("index_exists")
+        return {
+            "status": "ok" if ready else "degraded",
+            "service": settings.app_name,
+            "opensearch": opensearch,
+            "reranker_enabled": settings.reranker_enabled,
+        }
 
     @app.post("/ingestion/run", response_model=IngestionRunResponse)
     def run_ingestion(body: IngestionRunRequest) -> IngestionRunResponse:
@@ -65,7 +104,33 @@ def create_app() -> FastAPI:
             errors=run.errors,
         )
 
+    @app.post("/search", response_model=SearchResponse)
+    def search(body: SearchRequest) -> SearchResponse:
+        query = body.query.strip()
+        if not query:
+            raise HTTPException(status_code=400, detail="Query must not be empty")
+
+        filters = None
+        if body.filters and not _filters_empty(body.filters):
+            filters = SearchFilters.model_validate(body.filters.model_dump())
+
+        try:
+            results = get_container().retrieval_service.search(
+                query,
+                top_k=body.top_k,
+                filters=filters,
+            )
+        except Exception as exc:
+            logger.exception("search_failed", query=query[:80])
+            raise HTTPException(status_code=503, detail=f"Search failed: {exc}") from exc
+
+        return SearchResponse(query=query, results=results)
+
     return app
+
+
+def _filters_empty(filters: SearchFiltersRequest) -> bool:
+    return SearchFilters.model_validate(filters.model_dump()).is_empty()
 
 
 app = create_app()

@@ -7,6 +7,7 @@ from domain.models import (
     PreprocessedDocument,
     RawDocument,
     RegistryStatus,
+    RetrievedChunk,
     SectionNode,
     SourceObject,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "PreprocessedDocument",
     "RawDocument",
     "RegistryStatus",
+    "RetrievedChunk",
     "SectionNode",
     "SourceObject",
 ]

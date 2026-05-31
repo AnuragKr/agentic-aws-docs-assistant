@@ -10,6 +10,8 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 from config.logging import ConfigurationError, get_logger
 from config.settings import Settings
 from domain.models import ChunkRecord
+from infrastructure.aws.session import get_boto_session
+from infrastructure.opensearch.mappings import index_mappings
 from ingestion.pipeline_log import log_gap
 
 logger = get_logger(__name__)
@@ -50,7 +52,7 @@ def create_opensearch_client(settings: Settings) -> OpenSearch:
     timeout = settings.opensearch_timeout
 
     if _uses_sigv4(settings.opensearch_auth_mode):
-        credentials = boto3.Session().get_credentials()
+        credentials = get_boto_session(settings.aws_region).get_credentials()
         if credentials is None:
             raise ConfigurationError(
                 "AWS credentials not found — OpenSearch requires SigV4 signing on EC2/instance role"
@@ -102,40 +104,7 @@ class OpenSearchIndexer:
         if self._client.indices.exists(index=self._index):
             return
 
-        body = {
-            "settings": {"index": {"knn": True}},
-            "mappings": {
-                "properties": {
-                    "chunk_id": {"type": "keyword"},
-                    "document_id": {"type": "keyword"},
-                    "embedding": {"type": "knn_vector", "dimension": dimension},
-                    "content": {"type": "text"},
-                    "chunk_summary": {"type": "text"},
-                    "document_type": {"type": "keyword"},
-                    "service": {"type": "keyword"},
-                    "service_category": {"type": "keyword"},
-                    "section": {"type": "keyword"},
-                    "subsection": {"type": "keyword"},
-                    "hierarchy_path": {"type": "keyword"},
-                    "services": {"type": "keyword"},
-                    "source_file": {"type": "keyword"},
-                    "title": {"type": "keyword"},
-                    "source_url": {"type": "keyword"},
-                    "prev_chunk_id": {"type": "keyword"},
-                    "next_chunk_id": {"type": "keyword"},
-                    "page_number": {"type": "integer"},
-                    "chunk_order": {"type": "integer"},
-                    "total_pages": {"type": "integer"},
-                    "keywords": {"type": "keyword"},
-                    "topics": {"type": "keyword"},
-                    "heading_level": {"type": "integer"},
-                    "chunk_index": {"type": "integer"},
-                    "total_chunks": {"type": "integer"},
-                    "content_type": {"type": "keyword"},
-                }
-            },
-        }
-        self._client.indices.create(index=self._index, body=body)
+        self._client.indices.create(index=self._index, body=index_mappings(dimension))
         logger.info("opensearch_index_created", index=self._index, dimension=dimension)
 
     def index(self, chunks: list[ChunkRecord], source_key: str) -> IndexResult:

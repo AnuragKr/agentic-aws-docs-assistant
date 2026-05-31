@@ -22,4 +22,5 @@ class DocumentPreprocessor:
             last_modified=document.last_modified,
             sections=document.sections,
             total_pages=document.total_pages,
+            document_title=document.document_title,
         )

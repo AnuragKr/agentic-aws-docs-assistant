@@ -21,9 +21,9 @@ class _FakePdf:
 def test_detect_aws_services_from_text() -> None:
     text = "Use IAM roles with CloudTrail and AWS Organizations for governance."
     services = detect_aws_services(text)
-    assert "IAM" in services
-    assert "CloudTrail" in services
-    assert "Organizations" in services
+    assert "AWS IAM" in services
+    assert "AWS CloudTrail" in services
+    assert "AWS Organizations" in services
 
 
 def test_toc_builds_nested_sections_with_page_ranges() -> None:
@@ -50,4 +50,4 @@ def test_toc_builds_nested_sections_with_page_ranges() -> None:
     assert roles.title == "IAM Roles"
     assert roles.page_start == 8
     assert roles.page_end == 19
-    assert "IAM" in roles.content
+    assert "AWS IAM" in roles.content

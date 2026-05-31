@@ -1,10 +1,9 @@
 from collections.abc import Iterator
 
-import boto3
-
 from config.logging import ConfigurationError, get_logger
 from config.utils import with_retry
 from domain.models import RawDocument, SourceObject
+from infrastructure.aws.session import get_s3_client
 
 logger = get_logger(__name__)
 
@@ -18,7 +17,7 @@ class S3DocumentLoader:
         if not bucket:
             raise ConfigurationError("S3_BUCKET is not configured")
         self._bucket = bucket
-        self._client = boto3.client("s3", region_name=region)
+        self._client = get_s3_client(region)
 
     @property
     def bucket(self) -> str:

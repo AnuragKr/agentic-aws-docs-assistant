@@ -4,6 +4,7 @@ from functools import cached_property
 from config.settings import Settings, get_settings
 from infrastructure.aws.dynamodb_registry import DynamoDBProcessingRegistry
 from infrastructure.opensearch.indexer import OpenSearchIndexer, create_opensearch_client
+from infrastructure.opensearch.store import OpenSearchStore
 from ingestion.chunkers.hierarchical import HierarchicalChunker
 from ingestion.embeddings.factory import get_embedding_provider
 from ingestion.enrichers.chunks import ChunkEnricher
@@ -14,6 +15,8 @@ from ingestion.parsers.factory import ParserFactory
 from ingestion.pipeline import DocumentIngestionPipeline
 from ingestion.preprocessors.pipeline import DocumentPreprocessor
 from ingestion.writers.s3_writer import S3ProcessedDocumentWriter
+from retrieval.reranker import get_reranker
+from retrieval.service import RetrievalService
 
 
 @dataclass
@@ -63,6 +66,19 @@ class IngestionContainer:
     @cached_property
     def indexer(self) -> OpenSearchIndexer:
         return OpenSearchIndexer(create_opensearch_client(self.settings), self.settings)
+
+    @cached_property
+    def opensearch_store(self) -> OpenSearchStore:
+        return OpenSearchStore(create_opensearch_client(self.settings), self.settings)
+
+    @cached_property
+    def retrieval_service(self) -> RetrievalService:
+        return RetrievalService(
+            embeddings=self.embedding_provider,
+            store=self.opensearch_store,
+            reranker=get_reranker(self.settings),
+            settings=self.settings,
+        )
 
     @cached_property
     def registry(self) -> DynamoDBProcessingRegistry:

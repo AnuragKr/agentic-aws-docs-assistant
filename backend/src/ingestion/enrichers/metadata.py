@@ -48,6 +48,7 @@ class MetadataExtractor:
         metadata = DocumentMetadata(
             document_id=document_id_from_key(document.key),
             title=title,
+            document_title=document.document_title or title,
             service=service,
             service_category=category,
             services=services,
@@ -75,6 +76,8 @@ class MetadataExtractor:
         parts: list[str],
         source_file: str,
     ) -> str:
+        if document.document_title:
+            return document.document_title
         if document.sections:
             return document.sections[0].title
         name = re.sub(r"\.[^.]+$", "", source_file)
