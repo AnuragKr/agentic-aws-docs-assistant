@@ -119,6 +119,12 @@ The solution follows an Agentic RAG architecture where retrieval and reasoning a
 
 ---
 
+## Application Architecture
+
+<img width="3796" height="5784" alt="diagram" src="https://github.com/user-attachments/assets/8817cdbd-d7cf-44cb-b1d9-1e098e64df4f" />
+
+---
+
 ## Agentic Workflow
 
 The application implements a lightweight agentic workflow.
